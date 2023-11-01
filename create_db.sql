@@ -21,3 +21,12 @@ create table books (
         foreign key (author_id)
             references authors(id)
 );
+
+
+WITH new_author AS (
+    insert into authors (name, created_At)
+    values ('Lovecraft', current_timestamp) returning id
+) 
+INSERT INTO books (name, genre, created_at, author_id)
+    SELECT 'Шепчущий во тьме', 'Хоррор', current_timestamp, id
+        FROM new_author;

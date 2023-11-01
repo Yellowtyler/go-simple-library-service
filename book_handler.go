@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
@@ -45,19 +46,24 @@ func (BookHandler *BookHandler) getBook(w http.ResponseWriter, r *http.Request) 
 	var err error
 	strs := strings.Split(r.URL.Path, "/")
 
-	if id, err = uuid.FromBytes([]byte(strs[len(strs)-1])); err != nil {
+	log.Println("getBook() - processing request", r.URL.Path)
+
+	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
+		log.Println("getBook() - received error", err)
 		InternalServerErrorHandler(w, r)
 		return
 	}
 
 	var book Book
 	if book, err = BookHandler.s.GetBook(id); err != nil {
-		NotFoundHandler(w, r)
+		log.Println("getBook() - received error from db", err)
+		InternalServerErrorHandler(w, r)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(book)
 	if err != nil {
+		log.Println("getBook() - received error while marshaling", err)
 		InternalServerErrorHandler(w, r)
 		return
 	}

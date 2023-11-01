@@ -7,7 +7,7 @@ import (
 
 func main() {
 	log.Println("started app")
-	db := connect()
+	db := Connect()
 	db.Ping()
 
 	bookHandler := newBookHandler(db)
