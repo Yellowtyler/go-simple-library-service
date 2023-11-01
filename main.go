@@ -1,16 +1,21 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 )
 
 func main() {
-	fmt.Printf("Hi!")
+	log.Println("started app")
+	db := connect()
+	db.Ping()
+
+	bookHandler := newBookHandler(db)
+
 	server := http.NewServeMux()
 	server.Handle("/", &homeHandler{})
-	server.Handle("/books", &BookHandler{})
-	server.Handle("/books/", &BookHandler{})
+	server.Handle("/books", bookHandler)
+	server.Handle("/books/", bookHandler)
 	http.ListenAndServe(":8080", server)
 }
 

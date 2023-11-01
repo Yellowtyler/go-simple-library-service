@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -9,7 +10,12 @@ import (
 )
 
 type BookHandler struct {
-	s BookStore
+	s *BookStore
+}
+
+func newBookHandler(db *sql.DB) *BookHandler {
+	store := newBookStore(db)
+	return &BookHandler{store}
 }
 
 func (bookHandler *BookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
