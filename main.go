@@ -3,16 +3,14 @@ package main
 import (
 	"fmt"
 	"net/http"
-
-	"github.com/Yellowtyler/handlers"
 )
 
 func main() {
 	fmt.Printf("Hi!")
 	server := http.NewServeMux()
 	server.Handle("/", &homeHandler{})
-	server.Handle("/books", &handlers.BookHandler{})
-	server.Handle("/books/", &handlers.BookHandler{})
+	server.Handle("/books", &BookHandler{})
+	server.Handle("/books/", &BookHandler{})
 	http.ListenAndServe(":8080", server)
 }
 

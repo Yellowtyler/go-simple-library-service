@@ -1,10 +1,16 @@
-package handlers
+package main
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
+
+	"github.com/google/uuid"
 )
 
-type BookHandler struct{}
+type BookHandler struct {
+	s BookStore
+}
 
 func (bookHandler *BookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
@@ -29,7 +35,29 @@ func (bookHandler *BookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 }
 
 func (BookHandler *BookHandler) getBook(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("get book"))
+	var id uuid.UUID
+	var err error
+	strs := strings.Split(r.URL.Path, "/")
+
+	if id, err = uuid.FromBytes([]byte(strs[len(strs)-1])); err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	var book Book
+	if book, err = BookHandler.s.GetBook(id); err != nil {
+		NotFoundHandler(w, r)
+		return
+	}
+
+	jsonBytes, err := json.Marshal(book)
+	if err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonBytes)
 }
 
 func (BookHandler *BookHandler) getBooks(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +66,11 @@ func (BookHandler *BookHandler) getBooks(w http.ResponseWriter, r *http.Request)
 }
 
 func (BookHandler *BookHandler) createBook(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("create book"))
+	var book Book
+
+	if err := json.NewDecoder(r.Body).Decode(&book); err != nil {
+		InternalServerErrorHandler(w, r)
+	}
 
 }
 
