@@ -14,6 +14,7 @@ create table books (
     id uuid DEFAULT uuid_generate_v4(),
     name varchar not null,
     genre varchar not null,
+    publication_date date not null,
     created_at timestamp not null,
     author_id uuid,
     primary key (id),
@@ -27,6 +28,6 @@ WITH new_author AS (
     insert into authors (name, created_At)
     values ('Lovecraft', current_timestamp) returning id
 ) 
-INSERT INTO books (name, genre, created_at, author_id)
-    SELECT 'Шепчущий во тьме', 'Хоррор', current_timestamp, id
+INSERT INTO books (name, genre, publication_date, created_at, author_id)
+    SELECT 'Шепчущий во тьме', 'Хоррор', '1920-10-02', current_timestamp, id
         FROM new_author;
