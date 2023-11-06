@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,8 +40,65 @@ func (store *BookStore) GetBook(id uuid.UUID) (b Book, e error) {
 	return b, nil
 }
 
-func (store *BookStore) GetBooks(name string, genre string, author string, date string) (b []Book, e error) {
-	return
+func (store *BookStore) GetBooks(m map[string]string) ([]Book, error) {
+	query := "select id, name, genre, publication_date, created_at, author_id from books"
+	params := make([]any, len(m))
+
+	if len(m) != 0 {
+		query += " where "
+		var i = 1
+		for k, v := range m {
+			if k == "publication_date" {
+				query += k + "=$" + fmt.Sprint(i) + " "
+			} else {
+				query += k + " like '%' || $" + fmt.Sprint(i) + " || '%' "
+			}
+			params[i-1] = v
+			i++
+		}
+	}
+
+	query = strings.TrimSpace(query)
+	log.Println("BookStore.GetBooks() - executing query", query, params)
+
+	statement, err := store.db.Prepare(query)
+
+	if err != nil {
+		log.Println("BookStore.GetBooks() - received error from db", err)
+		return nil, err
+	}
+
+	var queryRows *sql.Rows
+	var queryError error
+	if len(params) == 0 {
+		queryRows, queryError = statement.Query()
+	} else {
+		queryRows, queryError = statement.Query(params...)
+	}
+
+	if queryError != nil {
+		log.Println("BookStore.GetBooks() - received error from db", queryError)
+		return nil, queryError
+	}
+
+	var books []Book
+	defer queryRows.Close()
+	for queryRows.Next() {
+		var book Book
+		if scanErr := queryRows.Scan(&book.Id, &book.Name, &book.Genre, &book.PublicationDate, &book.CreatedAt, &book.Author.Id); scanErr != nil {
+			log.Println("BookStore.GetBooks() - received error while scanning", err)
+			return nil, err
+		}
+
+		books = append(books, book)
+	}
+
+	if err := queryRows.Err(); err != nil {
+		log.Println("BookStore.GetBooks() - received error from db", err)
+		return nil, err
+	}
+
+	return books, nil
 }
 
 func (store *BookStore) Remove(id uuid.UUID) error {

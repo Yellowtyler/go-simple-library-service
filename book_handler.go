@@ -72,14 +72,46 @@ func (BookHandler *BookHandler) getBook(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	log.Println("BookHandler.getBook() - successfully finished req", book)
+
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonBytes)
 	w.Header().Set("Content-Type", "application/json")
 }
 
 func (BookHandler *BookHandler) getBooks(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("get books"))
+	values := r.URL.Query()
 
+	queryMap := ToMap(values)
+	log.Println("BookHandler.getBooks() - received req", queryMap)
+
+	if !ValidParams(queryMap) {
+		log.Println("BookHandler.getBooks() - received invalid params!", queryMap)
+
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	var books []Book
+	var err error
+	if books, err = BookHandler.s.GetBooks(queryMap); err != nil {
+		log.Println("BookHandler.getBooks() - received error from db", err)
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	jsonBytes, err := json.Marshal(books)
+	if err != nil {
+		log.Println("BookHandler.getBooks() - received error while marshaling", err)
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	log.Println("BookHandler.getBooks() - successfully finished req", books)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonBytes)
+	w.Header().Set("Content-Type", "application/json")
 }
 
 func (BookHandler *BookHandler) createBook(w http.ResponseWriter, r *http.Request) {
