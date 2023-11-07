@@ -10,12 +10,14 @@ func main() {
 	db := Connect()
 	db.Ping()
 
-	bookHandler := newBookHandler(db)
-
+	bookHandler := NewBookHandler(db)
+	authorHandler := NewAuthorHandler(db)
 	server := http.NewServeMux()
 	server.Handle("/", &homeHandler{})
 	server.Handle("/books", bookHandler)
 	server.Handle("/books/", bookHandler)
+	server.Handle("/authors", authorHandler)
+	server.Handle("/authors/", authorHandler)
 	http.ListenAndServe(":8080", server)
 }
 

@@ -16,7 +16,8 @@ func Connect() *sql.DB {
 		log.Fatal(err)
 	}
 
-	log.Println("connected to ", db)
+	log.Println("Connect() - successfully connected to db", connStr)
+
 	c, ioErr := os.ReadFile("create_db.sql")
 	if ioErr != nil {
 		log.Fatal(ioErr)

@@ -31,3 +31,6 @@ WITH new_author AS (
 INSERT INTO books (name, genre, publication_date, created_at, author_id)
     SELECT 'Шепчущий во тьме', 'Хоррор', '1920-10-02', current_timestamp, id
         FROM new_author;
+INSERT INTO books (name, genre, publication_date, created_at, author_id)
+    SELECT 'Зов Ктулху', 'Хоррор', '1921-10-02', current_timestamp, id
+        FROM authors where name = 'Lovecraft';

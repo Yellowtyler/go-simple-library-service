@@ -14,8 +14,8 @@ type BookHandler struct {
 	s *BookStore
 }
 
-func newBookHandler(db *sql.DB) *BookHandler {
-	store := newBookStore(db)
+func NewBookHandler(db *sql.DB) *BookHandler {
+	store := NewBookStore(db)
 	return &BookHandler{store}
 }
 
@@ -85,7 +85,7 @@ func (BookHandler *BookHandler) getBooks(w http.ResponseWriter, r *http.Request)
 	queryMap := ToMap(values)
 	log.Println("BookHandler.getBooks() - received req", queryMap)
 
-	if !ValidParams(queryMap) {
+	if !ValidParams("book", queryMap) {
 		log.Println("BookHandler.getBooks() - received invalid params!", queryMap)
 
 		InternalServerErrorHandler(w, r)
@@ -130,6 +130,10 @@ func (BookHandler *BookHandler) createBook(w http.ResponseWriter, r *http.Reques
 	var err error
 	if savedBook, err = BookHandler.s.CreateBook(book); err != nil {
 		log.Println("BookHandler.createBook() - received error from db", err)
+		if err == sql.ErrNoRows {
+			NotFoundHandler(w, r)
+			return
+		}
 		InternalServerErrorHandler(w, r)
 		return
 	}
@@ -163,6 +167,10 @@ func (BookHandler *BookHandler) updateBook(w http.ResponseWriter, r *http.Reques
 	var err error
 	if updatedBook, err = BookHandler.s.UpdateBook(book); err != nil {
 		log.Println("BookHandler.updateBook() - received error from db", err)
+		if err == sql.ErrNoRows {
+			NotFoundHandler(w, r)
+			return
+		}
 		InternalServerErrorHandler(w, r)
 		return
 	}
@@ -196,6 +204,11 @@ func (BookHandler *BookHandler) deleteBook(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err = BookHandler.s.Remove(id); err != nil {
+		if err == sql.ErrNoRows {
+			NotFoundHandler(w, r)
+			return
+		}
+
 		log.Println("deleteBook() - received error from db", err)
 		InternalServerErrorHandler(w, r)
 		return
@@ -204,5 +217,4 @@ func (BookHandler *BookHandler) deleteBook(w http.ResponseWriter, r *http.Reques
 	log.Println("BookHandler.deleteBook() - successfully finished req", id)
 
 	w.WriteHeader(http.StatusNoContent)
-
 }

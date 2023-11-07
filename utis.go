@@ -6,11 +6,16 @@ import (
 )
 
 var (
-	BookRe       = regexp.MustCompile(`^/books/*$`)
-	BookReWithID = regexp.MustCompile(`^/books/([a-z0-9]+(?:-[a-z0-9]+)+)$`)
+	BookRe         = regexp.MustCompile(`^/books/*$`)
+	BookReWithID   = regexp.MustCompile(`^/books/([a-z0-9]+(?:-[a-z0-9]+)+)$`)
+	AuthorRe       = regexp.MustCompile(`^/authors/*$`)
+	AuthorReWithID = regexp.MustCompile(`^/authors/([a-z0-9]+(?:-[a-z0-9]+)+)$`)
 )
 
-var params = map[string]bool{"name": true, "genre": true, "publication_date": true}
+var params = map[string]map[string]bool{
+	"author": {"book_name": true, "author_name": true, "genre": true},
+	"book":   {"book_name": true, "genre": true, "publication_date": true, "author_name": true},
+}
 
 func ToMap(values url.Values) map[string]string {
 	res := make(map[string]string)
@@ -20,9 +25,10 @@ func ToMap(values url.Values) map[string]string {
 	return res
 }
 
-func ValidParams(m map[string]string) bool {
+func ValidParams(api string, m map[string]string) bool {
+	var available_params = params[api]
 	for k := range m {
-		if _, ok := params[k]; !ok {
+		if _, ok := available_params[k]; !ok {
 			return false
 		}
 	}

@@ -14,7 +14,7 @@ type BookStore struct {
 	db *sql.DB
 }
 
-func newBookStore(db *sql.DB) *BookStore {
+func NewBookStore(db *sql.DB) *BookStore {
 	return &BookStore{db}
 }
 
@@ -41,24 +41,32 @@ func (store *BookStore) GetBook(id uuid.UUID) (b Book, e error) {
 }
 
 func (store *BookStore) GetBooks(m map[string]string) ([]Book, error) {
-	query := "select id, name, genre, publication_date, created_at, author_id from books"
+	query := `select b.id, b.name, b.genre, b.publication_date, b.created_at, b.author_id, a.name, a.created_at from books b 
+		left join authors a on b.author_id = a.id`
 	params := make([]any, len(m))
 
 	if len(m) != 0 {
 		query += " where "
 		var i = 1
 		for k, v := range m {
-			if k == "publication_date" {
-				query += k + "=$" + fmt.Sprint(i) + " "
-			} else {
-				query += k + " like '%' || $" + fmt.Sprint(i) + " || '%' "
+			switch {
+			case k == "publication_date":
+				query += "b." + k + "=$" + fmt.Sprint(i) + " and "
+			case k == "author_name":
+				query += "a.name" + " like '%' || $" + fmt.Sprint(i) + " || '%' and "
+			case k == "book_name":
+				query += "b.name" + " like '%' || $" + fmt.Sprint(i) + " || '%' and "
+			default:
+				query += "b." + k + " like '%' || $" + fmt.Sprint(i) + " || '%' and "
 			}
 			params[i-1] = v
 			i++
 		}
+		query = strings.TrimSpace(query)
+		queryArr := strings.Split(query, " ")
+		query = strings.Join(queryArr[:len(queryArr)-1], " ")
 	}
 
-	query = strings.TrimSpace(query)
 	log.Println("BookStore.GetBooks() - executing query", query, params)
 
 	statement, err := store.db.Prepare(query)
@@ -85,9 +93,8 @@ func (store *BookStore) GetBooks(m map[string]string) ([]Book, error) {
 	defer queryRows.Close()
 	for queryRows.Next() {
 		var book Book
-		if scanErr := queryRows.Scan(&book.Id, &book.Name, &book.Genre, &book.PublicationDate, &book.CreatedAt, &book.Author.Id); scanErr != nil {
+		if scanErr := queryRows.Scan(&book.Id, &book.Name, &book.Genre, &book.PublicationDate, &book.CreatedAt, &book.Author.Id, &book.Author.Name, &book.Author.CreatedAt); scanErr != nil {
 			log.Println("BookStore.GetBooks() - received error while scanning", err)
-			return nil, err
 		}
 
 		books = append(books, book)
@@ -141,7 +148,7 @@ func (store *BookStore) CreateBook(b Book) (savedBook Book, err error) {
 
 	if scanError != nil {
 		log.Println("BookStore.CreateBook() received error from db", scanError)
-		return b, err
+		return b, scanError
 	}
 
 	savedBook.Author.Id = b.Author.Id
@@ -173,7 +180,7 @@ func (store *BookStore) UpdateBook(b Book) (updatedBook Book, err error) {
 
 	if scanError != nil {
 		log.Println("BookStore.UpdateBook() received error from db", scanError)
-		return b, err
+		return b, scanError
 	}
 
 	return updatedBook, nil
