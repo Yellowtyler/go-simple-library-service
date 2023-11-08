@@ -10,6 +10,8 @@ var (
 	BookReWithID   = regexp.MustCompile(`^/books/([a-z0-9]+(?:-[a-z0-9]+)+)$`)
 	AuthorRe       = regexp.MustCompile(`^/authors/*$`)
 	AuthorReWithID = regexp.MustCompile(`^/authors/([a-z0-9]+(?:-[a-z0-9]+)+)$`)
+	UserRe         = regexp.MustCompile(`^/users/*$`)
+	UserReWithID   = regexp.MustCompile(`^/users/([a-z0-9]+(?:-[a-z0-9]+)+)$`)
 )
 
 var params = map[string]map[string]bool{

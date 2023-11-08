@@ -3,6 +3,17 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 drop table if exists books;
 drop table if exists authors;
 
+create table users (
+    id uuid DEFAULT uuid_generate_v4(),
+    name varchar not null unique,
+    mail varchar not null,
+    password varchar not null,
+    role int not null,
+    created_at timestamp not null,
+    token varchar
+    primary key(id)
+);
+
 create table authors (
     id uuid DEFAULT uuid_generate_v4(),
     name varchar not null,
