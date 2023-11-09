@@ -20,7 +20,7 @@ func NewUserStore(db *sql.DB) *UserStore {
 
 func (store *UserStore) GetUser(id uuid.UUID) (u User, e error) {
 	statement, err := store.db.Prepare(`
-		select u.* from users u where id=$1 
+		select u.id, u.name. u.mail, u.role, u.created_at users u where id=$1 
 	`)
 
 	if err != nil {
@@ -30,7 +30,7 @@ func (store *UserStore) GetUser(id uuid.UUID) (u User, e error) {
 
 	rows := statement.QueryRow(id.String())
 
-	if scanErr := rows.Scan(&u.Id, &u.Name, &u.Mail, &u.Password, &u.Role, &u.CreatedAt); scanErr != nil {
+	if scanErr := rows.Scan(&u.Id, &u.Name, &u.Mail, &u.Role, &u.CreatedAt); scanErr != nil {
 		log.Println("UserStore.GetUser() - received error from db", scanErr)
 		return u, scanErr
 	}
@@ -41,7 +41,7 @@ func (store *UserStore) GetUser(id uuid.UUID) (u User, e error) {
 
 func (store *UserStore) GetUserByName(name string) (u User, e error) {
 	statement, err := store.db.Prepare(`
-		select u.* from users u where name=$1 
+		select u.id, u.name, u.mail, u.role, u.created_at users u where name=$1 
 	`)
 
 	if err != nil {
@@ -51,7 +51,7 @@ func (store *UserStore) GetUserByName(name string) (u User, e error) {
 
 	rows := statement.QueryRow(name)
 
-	if scanErr := rows.Scan(&u.Id, &u.Name, &u.Mail, &u.Password, &u.Role, &u.CreatedAt); scanErr != nil {
+	if scanErr := rows.Scan(&u.Id, &u.Name, &u.Mail, &u.Role, &u.CreatedAt); scanErr != nil {
 		log.Println("UserStore.GetUserByName() - received error from db", scanErr)
 		return u, scanErr
 	}
@@ -61,7 +61,7 @@ func (store *UserStore) GetUserByName(name string) (u User, e error) {
 }
 
 func (store *UserStore) GetUsers(m map[string]string) ([]User, error) {
-	query := "select * from users u"
+	query := "select u.id, u.name, u.mail, u.role, u.created_at, u.token from users u"
 	params := make([]any, len(m))
 
 	if len(m) != 0 {
@@ -104,7 +104,7 @@ func (store *UserStore) GetUsers(m map[string]string) ([]User, error) {
 	users := make([]User, 0)
 	for queryRows.Next() {
 		var user User
-		if scanErr := queryRows.Scan(&user.Id, &user.Name, &user.Mail, &user.Password, &user.Role, &user.CreatedAt); scanErr != nil {
+		if scanErr := queryRows.Scan(&user.Id, &user.Name, &user.Mail, &user.Role, &user.CreatedAt, &user.Token); scanErr != nil {
 			log.Println("UserStore.GetUsers() - received error while scanning", err)
 		}
 	}

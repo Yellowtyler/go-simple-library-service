@@ -43,4 +43,5 @@ type User struct {
 	Role      int       `json:"role"`
 	Password  string    `json:"-"`
 	CreatedAt string    `json:"createdAt"`
+	Token     string    `json:"-"`
 }

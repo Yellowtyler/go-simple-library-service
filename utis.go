@@ -12,6 +12,9 @@ var (
 	AuthorReWithID = regexp.MustCompile(`^/authors/([a-z0-9]+(?:-[a-z0-9]+)+)$`)
 	UserRe         = regexp.MustCompile(`^/users/*$`)
 	UserReWithID   = regexp.MustCompile(`^/users/([a-z0-9]+(?:-[a-z0-9]+)+)$`)
+	RegisterPath   = "/auth/register"
+	LoginPath      = "/auth/login"
+	LogoutPath     = "/auth/logout"
 )
 
 var params = map[string]map[string]bool{
