@@ -20,14 +20,14 @@ func Connect() *sql.DB {
 
 	c, ioErr := os.ReadFile("create_db.sql")
 	if ioErr != nil {
-		log.Fatal(ioErr)
+		log.Fatal("Connect()- io error ", ioErr)
 	}
 
 	sql := string(c)
 
 	_, err = db.Exec(sql)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Connect() - execution error ", err)
 	}
 
 	return db

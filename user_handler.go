@@ -14,9 +14,8 @@ type UserHandler struct {
 	s *UserStore
 }
 
-func NewUserHandler(db *sql.DB) UserHandler {
-	store := NewUserStore(db)
-	return UserHandler{store}
+func NewUserHandler(store *UserStore) *UserHandler {
+	return &UserHandler{store}
 }
 
 func (userHandler *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +33,7 @@ func (userHandler *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		userHandler.deleteUser(w, r)
 		return
 	default:
-		BadRequestHandler(w, r)
+		MethodNotAllowedHandler(w, r)
 		return
 	}
 }

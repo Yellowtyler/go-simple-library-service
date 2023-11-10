@@ -45,7 +45,6 @@ func (BookHandler *BookHandler) getBook(w http.ResponseWriter, r *http.Request) 
 	var token = r.Header.Get("Authorization")
 
 	if token == "" {
-		UnauthorizedHandler(w, r)
 		return
 	}
 

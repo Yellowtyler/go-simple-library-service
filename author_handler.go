@@ -37,7 +37,7 @@ func (authorHandler *AuthorHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		authorHandler.deleteAuthor(w, r)
 		return
 	default:
-		BadRequestHandler(w, r)
+		MethodNotAllowedHandler(w, r)
 		return
 	}
 }

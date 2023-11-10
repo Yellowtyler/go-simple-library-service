@@ -1,6 +1,12 @@
 package main
 
-import "net/http"
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+
+	"golang.org/x/crypto/bcrypt"
+)
 
 type AuthHandler struct {
 	s *UserStore
@@ -14,35 +20,124 @@ func (authHandler *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == RegisterPath:
 		authHandler.register(w, r)
+		return
 	case r.Method == http.MethodPost && r.URL.Path == LoginPath:
 		authHandler.login(w, r)
+		return
 	case r.Method == http.MethodPost && r.URL.Path == LogoutPath:
 		authHandler.logout(w, r)
+		return
+	default:
+		MethodNotAllowedHandler(w, r)
+		return
 	}
 }
 
 func (authHandler *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
-	// parse request
-	// validate name and mail
-	// create user
+	var req ReqisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Println("register() - error while decoding", err)
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	log.Println("register() - started to process", req)
+
+	var exists bool
+	var err error
+	if exists, err = authHandler.s.ExistsWithNameOrMail(req.Name, req.Mail); err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	if exists {
+		BadRequestHandler(w, r, "user already exists!")
+		return
+	}
+
+	req.Password, err = HashAndSalt([]byte(req.Password))
+	if err != nil {
+		log.Println("register() - error while hashing password", err)
+		InternalServerErrorHandler(w, r)
+	}
+
+	if err := authHandler.s.CreateUser(req); err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+
+	log.Println("register() - finished to process", req)
 }
 
 func (authHandler *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
-	return
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Println("AuthHandler.login() - error while decoding", err)
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	log.Println("AuthHandler.login() - started to process", req.Name)
+
+	var user User
+	var err error
+	if user, err = authHandler.s.GetUserByName(req.Name); err != nil {
+		UnauthorizedHandler(w, r, "wrong username")
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		UnauthorizedHandler(w, r, "wrong password")
+		return
+	}
+	var token string
+
+	if token, err = GenerateToken(user.Id, user.Role); err != nil {
+		log.Println("AuthHandler.login() - received error", err)
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(token))
+
+	log.Println("AuthHandler.login() - finished to process", req)
+
 }
 
-func (AuthHandler *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
+func (authHandler *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		BadRequestHandler(w, r, "Authorization header wasn't provided")
+		return
+	}
 
+	id, _, err := ParseToken(token)
+	if err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+	if err := authHandler.s.DeleteToken(id); err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
 }
 
 type ReqisterRequest struct {
-	name     string
-	mail     string
-	password string
-	role     int
+	Name     string `json:"name"`
+	Mail     string `json:"mail"`
+	Password string `json:"password"`
+	Role     int    `json:"role"`
 }
 
 type LoginRequest struct {
-	name     string
-	password string
+	Name     string `json:"name"`
+	Password string `json:"password"`
 }

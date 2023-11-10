@@ -12,12 +12,18 @@ func main() {
 
 	bookHandler := NewBookHandler(db)
 	authorHandler := NewAuthorHandler(db)
+	userStore := NewUserStore(db)
+	userHandler := NewUserHandler(userStore)
+	authHandler := NewAuthHandler(userStore)
 	server := http.NewServeMux()
 	server.Handle("/", &homeHandler{})
 	server.Handle("/books", bookHandler)
 	server.Handle("/books/", bookHandler)
 	server.Handle("/authors", authorHandler)
 	server.Handle("/authors/", authorHandler)
+	server.Handle("/users", userHandler)
+	server.Handle("/users/", userHandler)
+	server.Handle("/auth/", authHandler)
 	http.ListenAndServe(":8080", server)
 }
 

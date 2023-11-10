@@ -20,7 +20,7 @@ func NewUserStore(db *sql.DB) *UserStore {
 
 func (store *UserStore) GetUser(id uuid.UUID) (u User, e error) {
 	statement, err := store.db.Prepare(`
-		select u.id, u.name. u.mail, u.role, u.created_at users u where id=$1 
+		select id, name, mail, role, created_at from users where id=$1 
 	`)
 
 	if err != nil {
@@ -39,9 +39,33 @@ func (store *UserStore) GetUser(id uuid.UUID) (u User, e error) {
 	return u, nil
 }
 
+func (store *UserStore) ExistsWithNameOrMail(name string, mail string) (bool, error) {
+	statement, err := store.db.Prepare(`
+		select count(*) from users where name=$1 or mail=$2 
+	`)
+
+	if err != nil {
+		log.Println("UserStore.ExistsWithNameOrMail() - received error from db", err)
+		return true, err
+	}
+
+	row := statement.QueryRow(name, mail)
+	var count int
+	if scanErr := row.Scan(&count); scanErr != nil {
+		log.Println("UserStore.ExistsWithNameOrMail() - received error from db", scanErr)
+		return true, scanErr
+	}
+
+	log.Println("UserStore.ExistsWithNameOrMail() - received from db", count)
+	if count > 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
 func (store *UserStore) GetUserByName(name string) (u User, e error) {
 	statement, err := store.db.Prepare(`
-		select u.id, u.name, u.mail, u.role, u.created_at users u where name=$1 
+		select u.id, u.name, u.mail, u.role, u.created_at, u.password from users u where u.name=$1 
 	`)
 
 	if err != nil {
@@ -51,17 +75,17 @@ func (store *UserStore) GetUserByName(name string) (u User, e error) {
 
 	rows := statement.QueryRow(name)
 
-	if scanErr := rows.Scan(&u.Id, &u.Name, &u.Mail, &u.Role, &u.CreatedAt); scanErr != nil {
+	if scanErr := rows.Scan(&u.Id, &u.Name, &u.Mail, &u.Role, &u.CreatedAt, &u.Password); scanErr != nil {
 		log.Println("UserStore.GetUserByName() - received error from db", scanErr)
 		return u, scanErr
 	}
 
-	log.Println("UserStore.GetUserByName() - received from db", u)
+	log.Println("UserStore.GetUserByName() - received from db", u.Id, u.Name)
 	return u, nil
 }
 
 func (store *UserStore) GetUsers(m map[string]string) ([]User, error) {
-	query := "select u.id, u.name, u.mail, u.role, u.created_at, u.token from users u"
+	query := "select id, name, mail, role, created_at, token from users u"
 	params := make([]any, len(m))
 
 	if len(m) != 0 {
@@ -117,33 +141,25 @@ func (store *UserStore) GetUsers(m map[string]string) ([]User, error) {
 	return users, nil
 }
 
-func (store *UserStore) CreateUser(user User) (savedUser User, err error) {
+func (store *UserStore) CreateUser(user ReqisterRequest) error {
 	statement, err := store.db.Prepare(`
-		insert into Users(name, mail, password, role, created_at)
+		insert into users(name, mail, password, role, created_at)
 			values($1, $2, $3, $4, $5) 
-			returning *
 	`)
 
 	if err != nil {
 		log.Println("UserStore.CreateUser() - received error from db", err)
-		return savedUser, err
+		return err
 	}
 
-	password, err := hashAndSalt([]byte(user.Password))
+	_, err = statement.Exec(&user.Name, &user.Mail, &user.Password, &user.Role, time.Now().UTC())
+
 	if err != nil {
-		return savedUser, err
+		log.Println("UserStore.CreateUser() - received error from db", err)
+		return err
 	}
 
-	row := statement.QueryRow(&user.Name, &user.Mail, password, &user.Role, time.Now().UTC())
-
-	scanError := row.Scan(&savedUser.Id, &savedUser.Name, &savedUser.Mail, &savedUser.Password, &savedUser.Role, &savedUser.CreatedAt)
-
-	if scanError != nil {
-		log.Println("UserStore.CreateUser() - received error from db", scanError)
-		return savedUser, scanError
-	}
-
-	return savedUser, nil
+	return nil
 }
 
 func (store *UserStore) UpdateUser(user User) (updatedUser User, err error) {
@@ -157,7 +173,7 @@ func (store *UserStore) UpdateUser(user User) (updatedUser User, err error) {
 		return updatedUser, err
 	}
 
-	password, err := hashAndSalt([]byte(updatedUser.Password))
+	password, err := HashAndSalt([]byte(updatedUser.Password))
 	if err != nil {
 		return updatedUser, err
 	}
@@ -170,6 +186,25 @@ func (store *UserStore) UpdateUser(user User) (updatedUser User, err error) {
 	}
 
 	return updatedUser, nil
+}
+
+func (store *UserStore) DeleteToken(id uuid.UUID) (err error) {
+	statement, err := store.db.Prepare(`
+		update users set token=null where id=$1
+	`)
+
+	if err != nil {
+		log.Println("UserStore.DeleteToken() - received error from db", err)
+		return err
+	}
+	_, err = statement.Exec(id)
+
+	if err != nil {
+		log.Println("UserStore.DeleteToken() - received error from db", err)
+		return err
+	}
+
+	return nil
 }
 
 func (store *UserStore) DeleteUser(id uuid.UUID) error {

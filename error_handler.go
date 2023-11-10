@@ -14,12 +14,17 @@ func NotFoundHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("404 Not Found"))
 }
 
-func BadRequestHandler(w http.ResponseWriter, r *http.Request) {
+func BadRequestHandler(w http.ResponseWriter, r *http.Request, message string) {
 	w.WriteHeader(http.StatusBadRequest)
-	w.Write([]byte("400 Bad Request"))
+	w.Write([]byte(message))
 }
 
-func UnauthorizedHandler(w http.ResponseWriter, r *http.Request) {
+func UnauthorizedHandler(w http.ResponseWriter, r *http.Request, message string) {
 	w.WriteHeader(http.StatusUnauthorized)
-	w.Write([]byte("401 Unauthorized"))
+	w.Write([]byte(message))
+}
+
+func MethodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusMethodNotAllowed)
+	w.Write([]byte("405 Method Not Allowed"))
 }
