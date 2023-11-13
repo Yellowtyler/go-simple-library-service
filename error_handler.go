@@ -28,3 +28,8 @@ func MethodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusMethodNotAllowed)
 	w.Write([]byte("405 Method Not Allowed"))
 }
+
+func ForbiddenHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusForbidden)
+	w.Write([]byte("403 Forbidden"))
+}

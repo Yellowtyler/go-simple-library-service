@@ -63,6 +63,26 @@ func (store *UserStore) ExistsWithNameOrMail(name string, mail string) (bool, er
 	return false, nil
 }
 
+func (store *UserStore) GetUserByIdAndRole(id uuid.UUID, role int) (u User, err error) {
+	statement, err := store.db.Prepare(`
+		select u.id, u.name, u.mail, u.role, u.created_at, u.password from users u where u.id=$1 and u.role=$2 
+	`)
+
+	if err != nil {
+		log.Println("UserStore.GetUserByIdAndRole() - received error from db", err)
+		return u, err
+	}
+
+	row := statement.QueryRow(id, role)
+
+	if scanErr := row.Scan(&u.Id, &u.Name, &u.Mail, &u.Role, &u.CreatedAt, &u.Password); scanErr != nil {
+		log.Println("UserStore.GetUserByIdAndRole() - received error from db", scanErr)
+		return u, scanErr
+	}
+
+	return u, nil
+}
+
 func (store *UserStore) GetUserByName(name string) (u User, e error) {
 	statement, err := store.db.Prepare(`
 		select u.id, u.name, u.mail, u.role, u.created_at, u.password from users u where u.name=$1 

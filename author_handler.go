@@ -43,8 +43,20 @@ func (authorHandler *AuthorHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 }
 
 func (AuthorHandler *AuthorHandler) getAuthor(w http.ResponseWriter, r *http.Request) {
-	var id uuid.UUID
 	var err error
+
+	if err = ValidateToken(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
+		if err == sql.ErrNoRows {
+			log.Println("AuthorHandler.getAuthor() - user wasn't found")
+			UnauthorizedHandler(w, r, "user wasn't found")
+			return
+		}
+		log.Println("AuthorHandler.getAuthor() - invalid token", err)
+		UnauthorizedHandler(w, r, err.Error())
+		return
+	}
+
+	var id uuid.UUID
 	strs := strings.Split(r.URL.Path, "/")
 
 	log.Println("AuthorHandler.getAuthor() - processing request", r.URL.Path)
@@ -81,6 +93,18 @@ func (AuthorHandler *AuthorHandler) getAuthor(w http.ResponseWriter, r *http.Req
 }
 
 func (AuthorHandler *AuthorHandler) getAuthors(w http.ResponseWriter, r *http.Request) {
+	var err error
+	if err = ValidateToken(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
+		if err == sql.ErrNoRows {
+			log.Println("AuthorHandler.getAuthors() - user wasn't found")
+			UnauthorizedHandler(w, r, "user wasn't found")
+			return
+		}
+		log.Println("AuthorHandler.getAuthors() - invalid token", err)
+		UnauthorizedHandler(w, r, err.Error())
+		return
+	}
+
 	values := r.URL.Query()
 
 	queryMap := ToMap(values)
@@ -94,7 +118,6 @@ func (AuthorHandler *AuthorHandler) getAuthors(w http.ResponseWriter, r *http.Re
 	}
 
 	var Authors []Author
-	var err error
 	if Authors, err = AuthorHandler.s.GetAuthors(queryMap); err != nil {
 		log.Println("AuthorHandler.getAuthors() - received error from db", err)
 		InternalServerErrorHandler(w, r)
@@ -116,10 +139,27 @@ func (AuthorHandler *AuthorHandler) getAuthors(w http.ResponseWriter, r *http.Re
 }
 
 func (AuthorHandler *AuthorHandler) createAuthor(w http.ResponseWriter, r *http.Request) {
+	var err error
+	var user User
+	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
+		if err == sql.ErrNoRows {
+			log.Println("AuthorHandler.createAuthor() - user wasn't found")
+			UnauthorizedHandler(w, r, "user wasn't found")
+			return
+		}
+		log.Println("AuthorHandler.createAuthor() - invalid token", err)
+		UnauthorizedHandler(w, r, err.Error())
+		return
+	}
 
+	if user.Role != MODERATOR {
+		log.Println("AuthorHandler.createAuthor() - user doesn't have permission to this resource")
+		ForbiddenHandler(w, r)
+		return
+	}
 	var author Author
 
-	if err := json.NewDecoder(r.Body).Decode(&author); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&author); err != nil {
 		log.Println("AuthorHandler.createAuthor() - received decode error", err)
 		InternalServerErrorHandler(w, r)
 		return
@@ -128,7 +168,6 @@ func (AuthorHandler *AuthorHandler) createAuthor(w http.ResponseWriter, r *http.
 	log.Println("AuthorHandler.createAuthor() - received req", author)
 
 	var savedAuthor Author
-	var err error
 	if savedAuthor, err = AuthorHandler.s.CreateAuthor(author); err != nil {
 		log.Println("AuthorHandler.createAuthor() - received error from db", err)
 		InternalServerErrorHandler(w, r)
@@ -150,7 +189,24 @@ func (AuthorHandler *AuthorHandler) createAuthor(w http.ResponseWriter, r *http.
 }
 
 func (AuthorHandler *AuthorHandler) updateAuthor(w http.ResponseWriter, r *http.Request) {
-	log.Println("AuthorHandler.updateAuthor() - received req", r.Body)
+	var err error
+	var user User
+	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
+		if err == sql.ErrNoRows {
+			log.Println("AuthorHandler.updateAuthor() - user wasn't found")
+			UnauthorizedHandler(w, r, "user wasn't found")
+			return
+		}
+		log.Println("AuthorHandler.updateAuthor() - invalid token", err)
+		UnauthorizedHandler(w, r, err.Error())
+		return
+	}
+
+	if user.Role != MODERATOR {
+		log.Println("AuthorHandler.updateAuthor() - user doesn't have permission to this resource")
+		ForbiddenHandler(w, r)
+		return
+	}
 
 	var author Author
 
@@ -160,8 +216,9 @@ func (AuthorHandler *AuthorHandler) updateAuthor(w http.ResponseWriter, r *http.
 		return
 	}
 
+	log.Println("AuthorHandler.updateAuthor() - received req", author)
+
 	var updatedAuthor Author
-	var err error
 	if updatedAuthor, err = AuthorHandler.s.UpdateAuthor(author); err != nil {
 		log.Println("AuthorHandler.updateAuthor() - received error from db", err)
 		if err == sql.ErrNoRows {
@@ -189,8 +246,8 @@ func (AuthorHandler *AuthorHandler) updateAuthor(w http.ResponseWriter, r *http.
 }
 
 func (AuthorHandler *AuthorHandler) deleteAuthor(w http.ResponseWriter, r *http.Request) {
-	var id uuid.UUID
 	var err error
+	var id uuid.UUID
 	strs := strings.Split(r.URL.Path, "/")
 
 	log.Println("deleteAuthor() - processing request", r.URL.Path)
@@ -198,6 +255,24 @@ func (AuthorHandler *AuthorHandler) deleteAuthor(w http.ResponseWriter, r *http.
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("deleteAuthor() - received error", err)
 		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	var user User
+	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
+		if err == sql.ErrNoRows {
+			log.Println("AuthorHandler.deleteAuthor() - user wasn't found")
+			UnauthorizedHandler(w, r, "user wasn't found")
+			return
+		}
+		log.Println("AuthorHandler.deleteAuthor() - invalid token", err)
+		UnauthorizedHandler(w, r, err.Error())
+		return
+	}
+
+	if user.Role != MODERATOR {
+		log.Println("AuthorHandler.deleteAuthor() - user doesn't have permission to this resource")
+		ForbiddenHandler(w, r)
 		return
 	}
 

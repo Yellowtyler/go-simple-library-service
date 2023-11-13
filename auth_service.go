@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -16,6 +17,58 @@ const expirationTime int64 = 100
 
 func hasPermission(userId uuid.UUID, role int, roles []int) bool {
 	return true
+}
+
+func ValidateTokenAndGetUser(authHeader string, store *UserStore) (user User, err error) {
+	if authHeader == "" {
+		return user, fmt.Errorf("empty Authorization header")
+	}
+
+	vals := strings.Split(authHeader, " ")
+	if len(vals) < 2 {
+		return user, fmt.Errorf("wrong header value")
+	}
+
+	token := vals[1]
+
+	var id uuid.UUID
+	var role int
+
+	if id, role, err = ParseToken(token); err != nil {
+		return user, err
+	}
+
+	if user, err = store.GetUserByIdAndRole(id, role); err != nil {
+		return user, err
+	}
+
+	return user, nil
+}
+
+func ValidateToken(authHeader string, store *UserStore) error {
+	if authHeader == "" {
+		return fmt.Errorf("empty Authorization header")
+	}
+
+	vals := strings.Split(authHeader, " ")
+	if len(vals) < 2 {
+		return fmt.Errorf("wrong header value")
+	}
+
+	token := vals[1]
+
+	var id uuid.UUID
+	var role int
+	var err error
+	if id, role, err = ParseToken(token); err != nil {
+		return err
+	}
+
+	if _, err = store.GetUserByIdAndRole(id, role); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func ParseToken(tokenString string) (uuid.UUID, int, error) {
@@ -65,7 +118,7 @@ func GenerateToken(id uuid.UUID, role int) (string, error) {
 
 	tokenString, err := token.SignedString(secretKey)
 	if err != nil {
-		log.Println("GenerateToken() received error while signing", err)
+		log.Println("AuthService.GenerateToken() received error while signing", err)
 		return "", err
 	}
 
@@ -75,7 +128,7 @@ func GenerateToken(id uuid.UUID, role int) (string, error) {
 func HashAndSalt(pwd []byte) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword(pwd, bcrypt.DefaultCost)
 	if err != nil {
-		log.Println("HashAndSalt() - received error while generating password", err)
+		log.Println("AuthService.HashAndSalt() - received error while generating password", err)
 		return "", err
 	}
 
