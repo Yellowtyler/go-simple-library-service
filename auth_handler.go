@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -36,12 +38,12 @@ func (authHandler *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 func (authHandler *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
 	var req ReqisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Println("register() - error while decoding", err)
+		log.Println("AuthHandler.register() - error while decoding", err)
 		InternalServerErrorHandler(w, r)
 		return
 	}
 
-	log.Println("register() - started to process", req)
+	log.Println("AuthHandler.register() - started to process", req)
 
 	var exists bool
 	var err error
@@ -57,8 +59,9 @@ func (authHandler *AuthHandler) register(w http.ResponseWriter, r *http.Request)
 
 	req.Password, err = HashAndSalt([]byte(req.Password))
 	if err != nil {
-		log.Println("register() - error while hashing password", err)
+		log.Println("AuthHandler.register() - error while hashing password", err)
 		InternalServerErrorHandler(w, r)
+		return
 	}
 
 	if err := authHandler.s.CreateUser(req); err != nil {
@@ -69,7 +72,7 @@ func (authHandler *AuthHandler) register(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 
-	log.Println("register() - finished to process", req)
+	log.Println("AuthHandler.register() - finished to process", req)
 }
 
 func (authHandler *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +113,8 @@ func (authHandler *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (authHandler *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
-	token := r.Header.Get("Authorization")
+	log.Println("AuthHandler.logout() - started to process")
+	token := strings.Split(r.Header.Get("Authorization"), " ")[1]
 	if token == "" {
 		BadRequestHandler(w, r, "Authorization header wasn't provided")
 		return
@@ -128,6 +132,7 @@ func (authHandler *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
+	log.Println("AuthHandler.logout() - successfully ended to process")
 }
 
 type ReqisterRequest struct {
@@ -140,4 +145,12 @@ type ReqisterRequest struct {
 type LoginRequest struct {
 	Name     string `json:"name"`
 	Password string `json:"password"`
+}
+
+func (r ReqisterRequest) String() string {
+	return fmt.Sprintf("name: %v, mail: %v", r.Name, r.Mail)
+}
+
+func (r LoginRequest) String() string {
+	return fmt.Sprintf("name: %v", r.Name)
 }
