@@ -9,10 +9,10 @@ func main() {
 	log.Println("started app")
 	db := Connect()
 	db.Ping()
-
-	bookHandler := NewBookHandler(db)
-	authorHandler := NewAuthorHandler(db)
 	userStore := NewUserStore(db)
+
+	bookHandler := NewBookHandler(db, userStore)
+	authorHandler := NewAuthorHandler(db, userStore)
 	userHandler := NewUserHandler(userStore)
 	authHandler := NewAuthHandler(userStore)
 	server := http.NewServeMux()

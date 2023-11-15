@@ -39,7 +39,7 @@ func ValidateTokenAndGetUser(authHeader string, store *UserStore) (user User, er
 	}
 
 	if user, err = store.GetUserByIdAndRole(id, role); err != nil {
-		return user, err
+		return user, fmt.Errorf("invalid token")
 	}
 
 	return user, nil
@@ -65,7 +65,7 @@ func ValidateToken(authHeader string, store *UserStore) error {
 	}
 
 	if _, err = store.GetUserByIdAndRole(id, role); err != nil {
-		return err
+		return fmt.Errorf("invalid token")
 	}
 
 	return nil

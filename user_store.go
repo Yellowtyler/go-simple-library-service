@@ -65,7 +65,7 @@ func (store *UserStore) ExistsWithNameOrMail(name string, mail string) (bool, er
 
 func (store *UserStore) GetUserByIdAndRole(id uuid.UUID, role int) (u User, err error) {
 	statement, err := store.db.Prepare(`
-		select u.id, u.name, u.mail, u.role, u.created_at, u.password from users u where u.id=$1 and u.role=$2 
+		select u.id, u.name, u.mail, u.role, u.created_at, u.password from users u where u.id=$1 and u.role=$2 and u.token is not null 
 	`)
 
 	if err != nil {
@@ -105,7 +105,7 @@ func (store *UserStore) GetUserByName(name string) (u User, e error) {
 }
 
 func (store *UserStore) GetUsers(m map[string]string) ([]User, error) {
-	query := "select id, name, mail, role, created_at, token from users u"
+	query := "select id, name, mail, role, created_at from users"
 	params := make([]any, len(m))
 
 	if len(m) != 0 {
@@ -148,9 +148,10 @@ func (store *UserStore) GetUsers(m map[string]string) ([]User, error) {
 	users := make([]User, 0)
 	for queryRows.Next() {
 		var user User
-		if scanErr := queryRows.Scan(&user.Id, &user.Name, &user.Mail, &user.Role, &user.CreatedAt, &user.Token); scanErr != nil {
+		if scanErr := queryRows.Scan(&user.Id, &user.Name, &user.Mail, &user.Role, &user.CreatedAt); scanErr != nil {
 			log.Println("UserStore.GetUsers() - received error while scanning", err)
 		}
+		users = append(users, user)
 	}
 
 	if err := queryRows.Err(); err != nil {
@@ -184,8 +185,8 @@ func (store *UserStore) CreateUser(user ReqisterRequest) error {
 
 func (store *UserStore) UpdateUser(user User) (updatedUser User, err error) {
 	statement, err := store.db.Prepare(`
-		update users set name=$1, mail=$2, password=$3, role=$4 where id=$5
-		returning *
+		update users set name=$1, mail=$2, role=$3 where id=$4
+		returning id, name, mail, role, created_at
 	`)
 
 	if err != nil {
@@ -193,19 +194,40 @@ func (store *UserStore) UpdateUser(user User) (updatedUser User, err error) {
 		return updatedUser, err
 	}
 
-	password, err := HashAndSalt([]byte(updatedUser.Password))
-	if err != nil {
-		return updatedUser, err
-	}
+	// password, err := HashAndSalt([]byte(updatedUser.Password))
+	// if err != nil {
+	// 	return updatedUser, err
+	// }
 
-	row := statement.QueryRow(&user.Name, &user.Mail, password, &user.Role, &user.Id)
+	row := statement.QueryRow(&user.Name, &user.Mail, &user.Role, &user.Id)
 
-	if scanError := row.Scan(&updatedUser.Id, &updatedUser.Name, &updatedUser.CreatedAt); scanError != nil {
+	if scanError := row.Scan(&updatedUser.Id, &updatedUser.Name, &updatedUser.Mail, &updatedUser.Role, &updatedUser.CreatedAt); scanError != nil {
 		log.Println("UserStore.UpdateUser() - received error from db", scanError)
 		return updatedUser, scanError
 	}
 
 	return updatedUser, nil
+}
+
+func (store *UserStore) UpdateToken(user User) error {
+	statement, err := store.db.Prepare(`
+		update users set token=$1 where id=$2
+		returning *
+	`)
+
+	if err != nil {
+		log.Println("UserStore.UpdateToken() - received error from db", err)
+		return err
+	}
+
+	_, execErr := statement.Exec(&user.Token, &user.Id)
+
+	if execErr != nil {
+		log.Println("UserStore.UpdateToken() - received error from db", execErr)
+		return execErr
+	}
+
+	return nil
 }
 
 func (store *UserStore) DeleteToken(id uuid.UUID) (err error) {

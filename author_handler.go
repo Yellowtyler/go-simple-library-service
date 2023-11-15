@@ -12,12 +12,13 @@ import (
 )
 
 type AuthorHandler struct {
-	s *AuthorStore
+	S         *AuthorStore
+	UserStore *UserStore
 }
 
-func NewAuthorHandler(db *sql.DB) *AuthorHandler {
+func NewAuthorHandler(db *sql.DB, userStore *UserStore) *AuthorHandler {
 	store := NewAuthorStore(db)
-	return &AuthorHandler{store}
+	return &AuthorHandler{store, userStore}
 }
 
 func (authorHandler *AuthorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -45,17 +46,16 @@ func (authorHandler *AuthorHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 
 func (AuthorHandler *AuthorHandler) getAuthor(w http.ResponseWriter, r *http.Request) {
 	var err error
-
-	if err = ValidateToken(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
-		log.Println("AuthorHandler.getAuthor() - invalid token", err)
-		HandleError(401, err.Error(), w)
-		return
-	}
-
 	var id uuid.UUID
 	strs := strings.Split(r.URL.Path, "/")
 
 	log.Println("AuthorHandler.getAuthor() - processing request", r.URL.Path)
+
+	if err = ValidateToken(r.Header.Get("Authorization"), AuthorHandler.UserStore); err != nil {
+		log.Println("AuthorHandler.getAuthor() - invalid token", err)
+		HandleError(401, err.Error(), w)
+		return
+	}
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("AuthorHandler.getAuthor() - received error", err)
@@ -64,7 +64,7 @@ func (AuthorHandler *AuthorHandler) getAuthor(w http.ResponseWriter, r *http.Req
 	}
 
 	var Author Author
-	if Author, err = AuthorHandler.s.GetAuthor(id); err != nil {
+	if Author, err = AuthorHandler.S.GetAuthor(id); err != nil {
 		if err == sql.ErrNoRows {
 			HandleError(404, fmt.Sprintf("author with id %v wasn't found", id), w)
 			return
@@ -90,16 +90,16 @@ func (AuthorHandler *AuthorHandler) getAuthor(w http.ResponseWriter, r *http.Req
 
 func (AuthorHandler *AuthorHandler) getAuthors(w http.ResponseWriter, r *http.Request) {
 	var err error
-	if err = ValidateToken(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
-		log.Println("AuthorHandler.getAuthors() - invalid token", err)
-		HandleError(401, err.Error(), w)
-		return
-	}
-
 	values := r.URL.Query()
 
 	queryMap := ToMap(values)
 	log.Println("AuthorHandler.getAuthors() - received req", queryMap)
+
+	if err = ValidateToken(r.Header.Get("Authorization"), AuthorHandler.UserStore); err != nil {
+		log.Println("AuthorHandler.getAuthors() - invalid token", err)
+		HandleError(401, err.Error(), w)
+		return
+	}
 
 	if !ValidParams("author", queryMap) {
 		log.Println("AuthorHandler.getAuthors() - received invalid params!", queryMap)
@@ -108,7 +108,7 @@ func (AuthorHandler *AuthorHandler) getAuthors(w http.ResponseWriter, r *http.Re
 	}
 
 	var Authors []Author
-	if Authors, err = AuthorHandler.s.GetAuthors(queryMap); err != nil {
+	if Authors, err = AuthorHandler.S.GetAuthors(queryMap); err != nil {
 		log.Println("AuthorHandler.getAuthors() - received error from db", err)
 		HandleError(500, "Internal Server Error", w)
 		return
@@ -131,7 +131,7 @@ func (AuthorHandler *AuthorHandler) getAuthors(w http.ResponseWriter, r *http.Re
 func (AuthorHandler *AuthorHandler) createAuthor(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var user User
-	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
+	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), AuthorHandler.UserStore); err != nil {
 		log.Println("AuthorHandler.createAuthor() - invalid token", err)
 		HandleError(401, err.Error(), w)
 		return
@@ -142,6 +142,7 @@ func (AuthorHandler *AuthorHandler) createAuthor(w http.ResponseWriter, r *http.
 		HandleError(403, "403 Forbidden", w)
 		return
 	}
+
 	var author Author
 
 	if err = json.NewDecoder(r.Body).Decode(&author); err != nil {
@@ -153,7 +154,7 @@ func (AuthorHandler *AuthorHandler) createAuthor(w http.ResponseWriter, r *http.
 	log.Println("AuthorHandler.createAuthor() - received req", author)
 
 	var savedAuthor Author
-	if savedAuthor, err = AuthorHandler.s.CreateAuthor(author); err != nil {
+	if savedAuthor, err = AuthorHandler.S.CreateAuthor(author); err != nil {
 		log.Println("AuthorHandler.createAuthor() - received error from db", err)
 		HandleError(500, "Internal Server Error", w)
 		return
@@ -176,7 +177,7 @@ func (AuthorHandler *AuthorHandler) createAuthor(w http.ResponseWriter, r *http.
 func (AuthorHandler *AuthorHandler) updateAuthor(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var user User
-	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
+	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), AuthorHandler.UserStore); err != nil {
 		log.Println("AuthorHandler.updateAuthor() - invalid token", err)
 		HandleError(401, err.Error(), w)
 		return
@@ -199,7 +200,7 @@ func (AuthorHandler *AuthorHandler) updateAuthor(w http.ResponseWriter, r *http.
 	log.Println("AuthorHandler.updateAuthor() - received req", author)
 
 	var updatedAuthor Author
-	if updatedAuthor, err = AuthorHandler.s.UpdateAuthor(author); err != nil {
+	if updatedAuthor, err = AuthorHandler.S.UpdateAuthor(author); err != nil {
 		log.Println("AuthorHandler.updateAuthor() - received error from db", err)
 		if err == sql.ErrNoRows {
 			HandleError(404, fmt.Sprintf("author with id %v wasn't found", author.Id), w)
@@ -239,7 +240,7 @@ func (AuthorHandler *AuthorHandler) deleteAuthor(w http.ResponseWriter, r *http.
 	}
 
 	var user User
-	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
+	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), AuthorHandler.UserStore); err != nil {
 		log.Println("AuthorHandler.deleteAuthor() - invalid token", err)
 		HandleError(401, err.Error(), w)
 		return
@@ -251,7 +252,7 @@ func (AuthorHandler *AuthorHandler) deleteAuthor(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if err = AuthorHandler.s.DeleteAuthor(id); err != nil {
+	if err = AuthorHandler.S.DeleteAuthor(id); err != nil {
 		log.Println("deleteAuthor() - received error from db", err)
 		if err == sql.ErrNoRows {
 			HandleError(404, fmt.Sprintf("author with id %v wasn't found", id), w)

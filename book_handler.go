@@ -12,12 +12,13 @@ import (
 )
 
 type BookHandler struct {
-	s *BookStore
+	S         *BookStore
+	UserStore *UserStore
 }
 
-func NewBookHandler(db *sql.DB) *BookHandler {
+func NewBookHandler(db *sql.DB, userStore *UserStore) *BookHandler {
 	store := NewBookStore(db)
-	return &BookHandler{store}
+	return &BookHandler{store, userStore}
 }
 
 func (bookHandler *BookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -43,17 +44,17 @@ func (bookHandler *BookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 }
 
 func (BookHandler *BookHandler) getBook(w http.ResponseWriter, r *http.Request) {
-	var token = r.Header.Get("Authorization")
-
-	if token == "" {
-		return
-	}
-
 	var id uuid.UUID
 	var err error
 	strs := strings.Split(r.URL.Path, "/")
 
 	log.Println("BookHandler.getBook() - processing request", r.URL.Path)
+
+	if err = ValidateToken(r.Header.Get("Authorization"), BookHandler.UserStore); err != nil {
+		log.Println("BookHandler.getBook() - invalid token", err)
+		HandleError(401, err.Error(), w)
+		return
+	}
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("BookHandler.getBook() - received error", err)
@@ -62,7 +63,7 @@ func (BookHandler *BookHandler) getBook(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var book Book
-	if book, err = BookHandler.s.GetBook(id); err != nil {
+	if book, err = BookHandler.S.GetBook(id); err != nil {
 		if err == sql.ErrNoRows {
 			HandleError(404, fmt.Sprintf("book with id %v wasn't found", id), w)
 			return
@@ -91,6 +92,13 @@ func (BookHandler *BookHandler) getBooks(w http.ResponseWriter, r *http.Request)
 
 	queryMap := ToMap(values)
 	log.Println("BookHandler.getBooks() - received req", queryMap)
+	var err error
+
+	if err = ValidateToken(r.Header.Get("Authorization"), BookHandler.UserStore); err != nil {
+		log.Println("BookHandler.getBooks() - invalid token", err)
+		HandleError(401, err.Error(), w)
+		return
+	}
 
 	if !ValidParams("book", queryMap) {
 		log.Println("BookHandler.getBooks() - received invalid params!", queryMap)
@@ -100,8 +108,7 @@ func (BookHandler *BookHandler) getBooks(w http.ResponseWriter, r *http.Request)
 	}
 
 	var books []Book
-	var err error
-	if books, err = BookHandler.s.GetBooks(queryMap); err != nil {
+	if books, err = BookHandler.S.GetBooks(queryMap); err != nil {
 		log.Println("BookHandler.getBooks() - received error from db", err)
 		HandleError(500, "Internal Server Error", w)
 		return
@@ -122,6 +129,19 @@ func (BookHandler *BookHandler) getBooks(w http.ResponseWriter, r *http.Request)
 }
 
 func (BookHandler *BookHandler) createBook(w http.ResponseWriter, r *http.Request) {
+	var invoker User
+	var err error
+	if invoker, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), BookHandler.UserStore); err != nil {
+		log.Println("BookHandler.createBook() - invalid token", err)
+		HandleError(401, err.Error(), w)
+		return
+	}
+
+	if invoker.Role != MODERATOR {
+		log.Println("AuthorHandler.createAuthor() - user doesn't have permission to this resource")
+		HandleError(403, "403 Forbidden", w)
+		return
+	}
 
 	var book Book
 
@@ -134,8 +154,7 @@ func (BookHandler *BookHandler) createBook(w http.ResponseWriter, r *http.Reques
 	log.Println("BookHandler.createBook() - received req", book)
 
 	var savedBook Book
-	var err error
-	if savedBook, err = BookHandler.s.CreateBook(book); err != nil {
+	if savedBook, err = BookHandler.S.CreateBook(book); err != nil {
 		log.Println("BookHandler.createBook() - received error from db", err)
 		if err == sql.ErrNoRows {
 			HandleError(404, fmt.Sprintf("author with id %v wasn't found", book.Author.Id), w)
@@ -160,6 +179,20 @@ func (BookHandler *BookHandler) createBook(w http.ResponseWriter, r *http.Reques
 }
 
 func (BookHandler *BookHandler) updateBook(w http.ResponseWriter, r *http.Request) {
+	var invoker User
+	var err error
+	if invoker, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), BookHandler.UserStore); err != nil {
+		log.Println("BookHandler.updateBook() - invalid token", err)
+		HandleError(401, err.Error(), w)
+		return
+	}
+
+	if invoker.Role != MODERATOR {
+		log.Println("AuthorHandler.createAuthor() - user doesn't have permission to this resource")
+		HandleError(403, "403 Forbidden", w)
+		return
+	}
+
 	log.Println("BookHandler.updateBook() - received req", r.Body)
 
 	var book Book
@@ -171,8 +204,7 @@ func (BookHandler *BookHandler) updateBook(w http.ResponseWriter, r *http.Reques
 	}
 
 	var updatedBook Book
-	var err error
-	if updatedBook, err = BookHandler.s.UpdateBook(book); err != nil {
+	if updatedBook, err = BookHandler.S.UpdateBook(book); err != nil {
 		log.Println("BookHandler.updateBook() - received error from db", err)
 		if err == sql.ErrNoRows {
 			HandleError(404, fmt.Sprintf("book with id %v wasn't found", book.Id), w)
@@ -204,13 +236,25 @@ func (BookHandler *BookHandler) deleteBook(w http.ResponseWriter, r *http.Reques
 
 	log.Println("deleteBook() - processing request", r.URL.Path)
 
+	var invoker User
+	if invoker, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), BookHandler.UserStore); err != nil {
+		log.Println("BookHandler.deleteBook() - invalid token", err)
+		HandleError(401, err.Error(), w)
+		return
+	}
+
+	if invoker.Role != MODERATOR {
+		log.Println("AuthorHandler.createAuthor() - user doesn't have permission to this resource")
+		HandleError(403, "403 Forbidden", w)
+		return
+	}
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("deleteBook() - received error", err)
 		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
-	if err = BookHandler.s.Remove(id); err != nil {
+	if err = BookHandler.S.Remove(id); err != nil {
 		if err == sql.ErrNoRows {
 			HandleError(404, fmt.Sprintf("book with id %v wasn't found", id), w)
 			return

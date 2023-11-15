@@ -12,7 +12,7 @@ import (
 )
 
 type UserHandler struct {
-	s *UserStore
+	S *UserStore
 }
 
 func NewUserHandler(store *UserStore) *UserHandler {
@@ -46,6 +46,12 @@ func (userHandler *UserHandler) getUser(w http.ResponseWriter, r *http.Request) 
 
 	log.Println("UserHandler.getUser() - processing request", r.URL.Path)
 
+	if err = ValidateToken(r.Header.Get("Authorization"), (*UserStore)(userHandler.S)); err != nil {
+		log.Println("UserHandler.getUser() - invalid token", err)
+		HandleError(401, err.Error(), w)
+		return
+	}
+
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("UserHandler.getUser() - received error", err)
 		HandleError(500, "Internal Server Error", w)
@@ -53,7 +59,7 @@ func (userHandler *UserHandler) getUser(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var User User
-	if User, err = userHandler.s.GetUser(id); err != nil {
+	if User, err = userHandler.S.GetUser(id); err != nil {
 		if err == sql.ErrNoRows {
 			HandleError(404, fmt.Sprintf("user with id %v wasn't found", id), w)
 			return
@@ -78,21 +84,33 @@ func (userHandler *UserHandler) getUser(w http.ResponseWriter, r *http.Request) 
 }
 
 func (userHandler *UserHandler) getUsers(w http.ResponseWriter, r *http.Request) {
+	var err error
+
 	values := r.URL.Query()
 
 	queryMap := ToMap(values)
 	log.Println("UserHandler.getUsers() - received req", queryMap)
 
+	var invoker User
+	if invoker, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(userHandler.S)); err != nil {
+		log.Println("UserHandler.getUsers() - invalid token", err)
+		HandleError(401, err.Error(), w)
+		return
+	}
+
+	if invoker.Role != ADMIN {
+		HandleError(403, "403 Forbidden", w)
+		return
+	}
+
 	if !ValidParams("User", queryMap) {
 		log.Println("UserHandler.getUsers() - received invalid params!", queryMap)
-
 		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	var Users []User
-	var err error
-	if Users, err = userHandler.s.GetUsers(queryMap); err != nil {
+	if Users, err = userHandler.S.GetUsers(queryMap); err != nil {
 		log.Println("UserHandler.getUsers() - received error from db", err)
 		HandleError(500, "Internal Server Error", w)
 		return
@@ -113,7 +131,18 @@ func (userHandler *UserHandler) getUsers(w http.ResponseWriter, r *http.Request)
 }
 
 func (userHandler *UserHandler) updateUser(w http.ResponseWriter, r *http.Request) {
-	log.Println("UserHandler.updateUser() - received req", r.Body)
+	var err error
+	var invoker User
+	if invoker, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(userHandler.S)); err != nil {
+		log.Println("UserHandler.updateUser() - invalid token: ", err)
+		HandleError(401, err.Error(), w)
+		return
+	}
+
+	if invoker.Role != ADMIN {
+		HandleError(403, "403 Forbidden", w)
+		return
+	}
 
 	var user User
 
@@ -123,9 +152,10 @@ func (userHandler *UserHandler) updateUser(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	log.Println("UserHandler.updateUser() - received req", user)
+
 	var updatedUser User
-	var err error
-	if updatedUser, err = userHandler.s.UpdateUser(user); err != nil {
+	if updatedUser, err = userHandler.S.UpdateUser(user); err != nil {
 		log.Println("UserHandler.updateUser() - received error from db", err)
 		if err == sql.ErrNoRows {
 			HandleError(404, fmt.Sprintf("user with id %v wasn't found", user.Id), w)
@@ -157,6 +187,23 @@ func (userHandler *UserHandler) deleteUser(w http.ResponseWriter, r *http.Reques
 	strs := strings.Split(r.URL.Path, "/")
 
 	log.Println("deleteUser() - processing request", r.URL.Path)
+	var invoker User
+	if invoker, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(userHandler.S)); err != nil {
+		log.Println("UserHandler.updateUser() - invalid token", err)
+		HandleError(401, err.Error(), w)
+		return
+	}
+
+	if invoker.Role != ADMIN {
+		HandleError(403, "403 Forbidden", w)
+		return
+	}
+
+	if err = ValidateToken(r.Header.Get("Authorization"), (*UserStore)(userHandler.S)); err != nil {
+		log.Println("UserHandler.deleteUser() - invalid token", err)
+		HandleError(401, err.Error(), w)
+		return
+	}
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("deleteUser() - received error", err)
@@ -164,7 +211,7 @@ func (userHandler *UserHandler) deleteUser(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err = userHandler.s.DeleteUser(id); err != nil {
+	if err = userHandler.S.DeleteUser(id); err != nil {
 		log.Println("deleteUser() - received error from db", err)
 		if err == sql.ErrNoRows {
 			HandleError(404, fmt.Sprintf("user with id %v wasn't found", id), w)

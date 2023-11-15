@@ -11,7 +11,7 @@ import (
 )
 
 type AuthHandler struct {
-	s *UserStore
+	S *UserStore
 }
 
 func NewAuthHandler(s *UserStore) *AuthHandler {
@@ -47,7 +47,7 @@ func (authHandler *AuthHandler) register(w http.ResponseWriter, r *http.Request)
 
 	var exists bool
 	var err error
-	if exists, err = authHandler.s.ExistsWithNameOrMail(req.Name, req.Mail); err != nil {
+	if exists, err = authHandler.S.ExistsWithNameOrMail(req.Name, req.Mail); err != nil {
 		HandleError(500, "Internal Server Error", w)
 		return
 	}
@@ -64,7 +64,7 @@ func (authHandler *AuthHandler) register(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := authHandler.s.CreateUser(req); err != nil {
+	if err := authHandler.S.CreateUser(req); err != nil {
 		HandleError(500, "Internal Server Error", w)
 		return
 	}
@@ -87,7 +87,7 @@ func (authHandler *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 
 	var user User
 	var err error
-	if user, err = authHandler.s.GetUserByName(req.Name); err != nil {
+	if user, err = authHandler.S.GetUserByName(req.Name); err != nil {
 		HandleError(401, "wrong username", w)
 		return
 	}
@@ -100,6 +100,13 @@ func (authHandler *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 	var token string
 
 	if token, err = GenerateToken(user.Id, user.Role); err != nil {
+		log.Println("AuthHandler.login() - received error", err)
+		HandleError(500, "Internal Server Error", w)
+		return
+	}
+
+	user.Token = token
+	if updateErr := authHandler.S.UpdateToken(user); updateErr != nil {
 		log.Println("AuthHandler.login() - received error", err)
 		HandleError(500, "Internal Server Error", w)
 		return
@@ -122,11 +129,11 @@ func (authHandler *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id, _, err := ParseToken(token)
-	if err != nil {
+	if err != nil && err.Error() != "token is expired!" {
 		HandleError(500, "Internal Server Error", w)
 		return
 	}
-	if err := authHandler.s.DeleteToken(id); err != nil {
+	if err := authHandler.S.DeleteToken(id); err != nil {
 		HandleError(500, "Internal Server Error", w)
 		return
 	}
