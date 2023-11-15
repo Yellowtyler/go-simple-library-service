@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -56,25 +57,25 @@ func (BookHandler *BookHandler) getBook(w http.ResponseWriter, r *http.Request) 
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("BookHandler.getBook() - received error", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	var book Book
 	if book, err = BookHandler.s.GetBook(id); err != nil {
 		if err == sql.ErrNoRows {
-			NotFoundHandler(w, r)
+			HandleError(404, fmt.Sprintf("book with id %v wasn't found", id), w)
 			return
 		}
 		log.Println("BookHandler.getBook() - received error from db", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(book)
 	if err != nil {
 		log.Println("BookHandler.getBook() - received error while marshaling", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -94,7 +95,7 @@ func (BookHandler *BookHandler) getBooks(w http.ResponseWriter, r *http.Request)
 	if !ValidParams("book", queryMap) {
 		log.Println("BookHandler.getBooks() - received invalid params!", queryMap)
 
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -102,14 +103,14 @@ func (BookHandler *BookHandler) getBooks(w http.ResponseWriter, r *http.Request)
 	var err error
 	if books, err = BookHandler.s.GetBooks(queryMap); err != nil {
 		log.Println("BookHandler.getBooks() - received error from db", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(books)
 	if err != nil {
 		log.Println("BookHandler.getBooks() - received error while marshaling", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -126,7 +127,7 @@ func (BookHandler *BookHandler) createBook(w http.ResponseWriter, r *http.Reques
 
 	if err := json.NewDecoder(r.Body).Decode(&book); err != nil {
 		log.Println("BookHandler.createBook() - received decode error", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -137,17 +138,17 @@ func (BookHandler *BookHandler) createBook(w http.ResponseWriter, r *http.Reques
 	if savedBook, err = BookHandler.s.CreateBook(book); err != nil {
 		log.Println("BookHandler.createBook() - received error from db", err)
 		if err == sql.ErrNoRows {
-			NotFoundHandler(w, r)
+			HandleError(404, fmt.Sprintf("author with id %v wasn't found", book.Author.Id), w)
 			return
 		}
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(savedBook)
 	if err != nil {
 		log.Println("BookHandler.createBook() - received error while marshaling", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -165,7 +166,7 @@ func (BookHandler *BookHandler) updateBook(w http.ResponseWriter, r *http.Reques
 
 	if err := json.NewDecoder(r.Body).Decode(&book); err != nil {
 		log.Println("BookHandler.updateBook() - received decode error", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -174,17 +175,17 @@ func (BookHandler *BookHandler) updateBook(w http.ResponseWriter, r *http.Reques
 	if updatedBook, err = BookHandler.s.UpdateBook(book); err != nil {
 		log.Println("BookHandler.updateBook() - received error from db", err)
 		if err == sql.ErrNoRows {
-			NotFoundHandler(w, r)
+			HandleError(404, fmt.Sprintf("book with id %v wasn't found", book.Id), w)
 			return
 		}
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(updatedBook)
 	if err != nil {
 		log.Println("BookHandler.updateBook() - received error while marshaling", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -205,18 +206,18 @@ func (BookHandler *BookHandler) deleteBook(w http.ResponseWriter, r *http.Reques
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("deleteBook() - received error", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	if err = BookHandler.s.Remove(id); err != nil {
 		if err == sql.ErrNoRows {
-			NotFoundHandler(w, r)
+			HandleError(404, fmt.Sprintf("book with id %v wasn't found", id), w)
 			return
 		}
 
 		log.Println("deleteBook() - received error from db", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 

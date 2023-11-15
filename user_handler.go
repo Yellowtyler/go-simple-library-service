@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -33,7 +34,7 @@ func (userHandler *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		userHandler.deleteUser(w, r)
 		return
 	default:
-		MethodNotAllowedHandler(w, r)
+		HandleError(405, fmt.Sprintf("Method %v not allowed", r.URL.Path), w)
 		return
 	}
 }
@@ -47,25 +48,25 @@ func (userHandler *UserHandler) getUser(w http.ResponseWriter, r *http.Request) 
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("UserHandler.getUser() - received error", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	var User User
 	if User, err = userHandler.s.GetUser(id); err != nil {
 		if err == sql.ErrNoRows {
-			NotFoundHandler(w, r)
+			HandleError(404, fmt.Sprintf("user with id %v wasn't found", id), w)
 			return
 		}
 		log.Println("UserHandler.getUser() - received error from db", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(User)
 	if err != nil {
 		log.Println("UserHandler.getUser() - received error while marshaling", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -85,7 +86,7 @@ func (userHandler *UserHandler) getUsers(w http.ResponseWriter, r *http.Request)
 	if !ValidParams("User", queryMap) {
 		log.Println("UserHandler.getUsers() - received invalid params!", queryMap)
 
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -93,14 +94,14 @@ func (userHandler *UserHandler) getUsers(w http.ResponseWriter, r *http.Request)
 	var err error
 	if Users, err = userHandler.s.GetUsers(queryMap); err != nil {
 		log.Println("UserHandler.getUsers() - received error from db", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(Users)
 	if err != nil {
 		log.Println("UserHandler.getUsers() - received error while marshaling", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -118,7 +119,7 @@ func (userHandler *UserHandler) updateUser(w http.ResponseWriter, r *http.Reques
 
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 		log.Println("UserHandler.updateUser() - received decode error", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -127,18 +128,18 @@ func (userHandler *UserHandler) updateUser(w http.ResponseWriter, r *http.Reques
 	if updatedUser, err = userHandler.s.UpdateUser(user); err != nil {
 		log.Println("UserHandler.updateUser() - received error from db", err)
 		if err == sql.ErrNoRows {
-			NotFoundHandler(w, r)
+			HandleError(404, fmt.Sprintf("user with id %v wasn't found", user.Id), w)
 			return
 		}
 
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(updatedUser)
 	if err != nil {
 		log.Println("UserHandler.updateUser() - received error while marshaling", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -159,18 +160,18 @@ func (userHandler *UserHandler) deleteUser(w http.ResponseWriter, r *http.Reques
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("deleteUser() - received error", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	if err = userHandler.s.DeleteUser(id); err != nil {
 		log.Println("deleteUser() - received error from db", err)
 		if err == sql.ErrNoRows {
-			NotFoundHandler(w, r)
+			HandleError(404, fmt.Sprintf("user with id %v wasn't found", id), w)
 			return
 		}
 
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 

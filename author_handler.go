@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -37,7 +38,7 @@ func (authorHandler *AuthorHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		authorHandler.deleteAuthor(w, r)
 		return
 	default:
-		MethodNotAllowedHandler(w, r)
+		HandleError(405, fmt.Sprintf("Method %v not allowed", r.URL.Path), w)
 		return
 	}
 }
@@ -46,13 +47,8 @@ func (AuthorHandler *AuthorHandler) getAuthor(w http.ResponseWriter, r *http.Req
 	var err error
 
 	if err = ValidateToken(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
-		if err == sql.ErrNoRows {
-			log.Println("AuthorHandler.getAuthor() - user wasn't found")
-			UnauthorizedHandler(w, r, "user wasn't found")
-			return
-		}
 		log.Println("AuthorHandler.getAuthor() - invalid token", err)
-		UnauthorizedHandler(w, r, err.Error())
+		HandleError(401, err.Error(), w)
 		return
 	}
 
@@ -63,25 +59,25 @@ func (AuthorHandler *AuthorHandler) getAuthor(w http.ResponseWriter, r *http.Req
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("AuthorHandler.getAuthor() - received error", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	var Author Author
 	if Author, err = AuthorHandler.s.GetAuthor(id); err != nil {
 		if err == sql.ErrNoRows {
-			NotFoundHandler(w, r)
+			HandleError(404, fmt.Sprintf("author with id %v wasn't found", id), w)
 			return
 		}
 		log.Println("AuthorHandler.getAuthor() - received error from db", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(Author)
 	if err != nil {
 		log.Println("AuthorHandler.getAuthor() - received error while marshaling", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -95,13 +91,8 @@ func (AuthorHandler *AuthorHandler) getAuthor(w http.ResponseWriter, r *http.Req
 func (AuthorHandler *AuthorHandler) getAuthors(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if err = ValidateToken(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
-		if err == sql.ErrNoRows {
-			log.Println("AuthorHandler.getAuthors() - user wasn't found")
-			UnauthorizedHandler(w, r, "user wasn't found")
-			return
-		}
 		log.Println("AuthorHandler.getAuthors() - invalid token", err)
-		UnauthorizedHandler(w, r, err.Error())
+		HandleError(401, err.Error(), w)
 		return
 	}
 
@@ -112,22 +103,21 @@ func (AuthorHandler *AuthorHandler) getAuthors(w http.ResponseWriter, r *http.Re
 
 	if !ValidParams("author", queryMap) {
 		log.Println("AuthorHandler.getAuthors() - received invalid params!", queryMap)
-
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	var Authors []Author
 	if Authors, err = AuthorHandler.s.GetAuthors(queryMap); err != nil {
 		log.Println("AuthorHandler.getAuthors() - received error from db", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(Authors)
 	if err != nil {
 		log.Println("AuthorHandler.getAuthors() - received error while marshaling", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -142,26 +132,21 @@ func (AuthorHandler *AuthorHandler) createAuthor(w http.ResponseWriter, r *http.
 	var err error
 	var user User
 	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
-		if err == sql.ErrNoRows {
-			log.Println("AuthorHandler.createAuthor() - user wasn't found")
-			UnauthorizedHandler(w, r, "user wasn't found")
-			return
-		}
 		log.Println("AuthorHandler.createAuthor() - invalid token", err)
-		UnauthorizedHandler(w, r, err.Error())
+		HandleError(401, err.Error(), w)
 		return
 	}
 
 	if user.Role != MODERATOR {
 		log.Println("AuthorHandler.createAuthor() - user doesn't have permission to this resource")
-		ForbiddenHandler(w, r)
+		HandleError(403, "403 Forbidden", w)
 		return
 	}
 	var author Author
 
 	if err = json.NewDecoder(r.Body).Decode(&author); err != nil {
 		log.Println("AuthorHandler.createAuthor() - received decode error", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -170,14 +155,14 @@ func (AuthorHandler *AuthorHandler) createAuthor(w http.ResponseWriter, r *http.
 	var savedAuthor Author
 	if savedAuthor, err = AuthorHandler.s.CreateAuthor(author); err != nil {
 		log.Println("AuthorHandler.createAuthor() - received error from db", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(savedAuthor)
 	if err != nil {
 		log.Println("AuthorHandler.createAuthor() - received error while marshaling", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -192,19 +177,14 @@ func (AuthorHandler *AuthorHandler) updateAuthor(w http.ResponseWriter, r *http.
 	var err error
 	var user User
 	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
-		if err == sql.ErrNoRows {
-			log.Println("AuthorHandler.updateAuthor() - user wasn't found")
-			UnauthorizedHandler(w, r, "user wasn't found")
-			return
-		}
 		log.Println("AuthorHandler.updateAuthor() - invalid token", err)
-		UnauthorizedHandler(w, r, err.Error())
+		HandleError(401, err.Error(), w)
 		return
 	}
 
 	if user.Role != MODERATOR {
 		log.Println("AuthorHandler.updateAuthor() - user doesn't have permission to this resource")
-		ForbiddenHandler(w, r)
+		HandleError(403, "403 Forbidden", w)
 		return
 	}
 
@@ -212,7 +192,7 @@ func (AuthorHandler *AuthorHandler) updateAuthor(w http.ResponseWriter, r *http.
 
 	if err := json.NewDecoder(r.Body).Decode(&author); err != nil {
 		log.Println("AuthorHandler.updateAuthor() - received decode error", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -222,18 +202,18 @@ func (AuthorHandler *AuthorHandler) updateAuthor(w http.ResponseWriter, r *http.
 	if updatedAuthor, err = AuthorHandler.s.UpdateAuthor(author); err != nil {
 		log.Println("AuthorHandler.updateAuthor() - received error from db", err)
 		if err == sql.ErrNoRows {
-			NotFoundHandler(w, r)
+			HandleError(404, fmt.Sprintf("author with id %v wasn't found", author.Id), w)
 			return
 		}
 
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(updatedAuthor)
 	if err != nil {
 		log.Println("AuthorHandler.updateAuthor() - received error while marshaling", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -254,36 +234,31 @@ func (AuthorHandler *AuthorHandler) deleteAuthor(w http.ResponseWriter, r *http.
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("deleteAuthor() - received error", err)
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	var user User
 	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(AuthorHandler.s)); err != nil {
-		if err == sql.ErrNoRows {
-			log.Println("AuthorHandler.deleteAuthor() - user wasn't found")
-			UnauthorizedHandler(w, r, "user wasn't found")
-			return
-		}
 		log.Println("AuthorHandler.deleteAuthor() - invalid token", err)
-		UnauthorizedHandler(w, r, err.Error())
+		HandleError(401, err.Error(), w)
 		return
 	}
 
 	if user.Role != MODERATOR {
 		log.Println("AuthorHandler.deleteAuthor() - user doesn't have permission to this resource")
-		ForbiddenHandler(w, r)
+		HandleError(403, "403 Forbidden", w)
 		return
 	}
 
 	if err = AuthorHandler.s.DeleteAuthor(id); err != nil {
 		log.Println("deleteAuthor() - received error from db", err)
 		if err == sql.ErrNoRows {
-			NotFoundHandler(w, r)
+			HandleError(404, fmt.Sprintf("author with id %v wasn't found", id), w)
 			return
 		}
 
-		InternalServerErrorHandler(w, r)
+		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
