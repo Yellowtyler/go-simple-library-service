@@ -1,8 +1,12 @@
-package main
+package author
 
 import (
 	"database/sql"
 	"encoding/json"
+	"example/library-service/internal/auth"
+	"example/library-service/internal/entity"
+	"example/library-service/internal/errors"
+	"example/library-service/internal/utils"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,34 +16,34 @@ import (
 )
 
 type AuthorHandler struct {
-	S         *AuthorStore
-	UserStore *UserStore
+	authorStore *AuthorStore
+	authStore   *auth.AuthStore
 }
 
-func NewAuthorHandler(db *sql.DB, userStore *UserStore) *AuthorHandler {
+func NewAuthorHandler(db *sql.DB, authStore *auth.AuthStore) *AuthorHandler {
 	store := NewAuthorStore(db)
-	return &AuthorHandler{store, userStore}
+	return &AuthorHandler{store, authStore}
 }
 
 func (authorHandler *AuthorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
-	case r.Method == http.MethodGet && AuthorRe.Match([]byte(r.URL.Path)):
+	case r.Method == http.MethodGet && utils.AuthorRe.Match([]byte(r.URL.Path)):
 		authorHandler.getAuthors(w, r)
 		return
-	case r.Method == http.MethodGet && AuthorReWithID.Match([]byte(r.URL.Path)):
+	case r.Method == http.MethodGet && utils.AuthorReWithID.Match([]byte(r.URL.Path)):
 		authorHandler.getAuthor(w, r)
 		return
-	case r.Method == http.MethodPost && AuthorRe.Match([]byte(r.URL.Path)):
+	case r.Method == http.MethodPost && utils.AuthorRe.Match([]byte(r.URL.Path)):
 		authorHandler.createAuthor(w, r)
 		return
-	case r.Method == http.MethodPut && AuthorRe.Match([]byte(r.URL.Path)):
+	case r.Method == http.MethodPut && utils.AuthorRe.Match([]byte(r.URL.Path)):
 		authorHandler.updateAuthor(w, r)
 		return
-	case r.Method == http.MethodDelete && AuthorReWithID.Match([]byte(r.URL.Path)):
+	case r.Method == http.MethodDelete && utils.AuthorReWithID.Match([]byte(r.URL.Path)):
 		authorHandler.deleteAuthor(w, r)
 		return
 	default:
-		HandleError(405, fmt.Sprintf("Method %v not allowed", r.URL.Path), w)
+		errors.HandleError(405, fmt.Sprintf("Method %v not allowed", r.URL.Path), w)
 		return
 	}
 }
@@ -51,33 +55,33 @@ func (AuthorHandler *AuthorHandler) getAuthor(w http.ResponseWriter, r *http.Req
 
 	log.Println("AuthorHandler.getAuthor() - processing request", r.URL.Path)
 
-	if err = ValidateToken(r.Header.Get("Authorization"), AuthorHandler.UserStore); err != nil {
+	if err = auth.ValidateToken(r.Header.Get("Authorization"), AuthorHandler.authStore); err != nil {
 		log.Println("AuthorHandler.getAuthor() - invalid token", err)
-		HandleError(401, err.Error(), w)
+		errors.HandleError(401, err.Error(), w)
 		return
 	}
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("AuthorHandler.getAuthor() - received error", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
-	var Author Author
-	if Author, err = AuthorHandler.S.GetAuthor(id); err != nil {
+	var Author entity.Author
+	if Author, err = AuthorHandler.authorStore.GetAuthor(id); err != nil {
 		if err == sql.ErrNoRows {
-			HandleError(404, fmt.Sprintf("author with id %v wasn't found", id), w)
+			errors.HandleError(404, fmt.Sprintf("author with id %v wasn't found", id), w)
 			return
 		}
 		log.Println("AuthorHandler.getAuthor() - received error from db", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(Author)
 	if err != nil {
 		log.Println("AuthorHandler.getAuthor() - received error while marshaling", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -92,32 +96,32 @@ func (AuthorHandler *AuthorHandler) getAuthors(w http.ResponseWriter, r *http.Re
 	var err error
 	values := r.URL.Query()
 
-	queryMap := ToMap(values)
+	queryMap := utils.ToMap(values)
 	log.Println("AuthorHandler.getAuthors() - received req", queryMap)
 
-	if err = ValidateToken(r.Header.Get("Authorization"), AuthorHandler.UserStore); err != nil {
+	if err = auth.ValidateToken(r.Header.Get("Authorization"), AuthorHandler.authStore); err != nil {
 		log.Println("AuthorHandler.getAuthors() - invalid token", err)
-		HandleError(401, err.Error(), w)
+		errors.HandleError(401, err.Error(), w)
 		return
 	}
 
-	if !ValidParams("author", queryMap) {
+	if !utils.ValidParams("author", queryMap) {
 		log.Println("AuthorHandler.getAuthors() - received invalid params!", queryMap)
-		HandleError(400, "Invalid request params", w)
+		errors.HandleError(400, "Invalid request params", w)
 		return
 	}
 
-	var Authors []Author
-	if Authors, err = AuthorHandler.S.GetAuthors(queryMap); err != nil {
+	var Authors []entity.Author
+	if Authors, err = AuthorHandler.authorStore.GetAuthors(queryMap); err != nil {
 		log.Println("AuthorHandler.getAuthors() - received error from db", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(Authors)
 	if err != nil {
 		log.Println("AuthorHandler.getAuthors() - received error while marshaling", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -130,40 +134,40 @@ func (AuthorHandler *AuthorHandler) getAuthors(w http.ResponseWriter, r *http.Re
 
 func (AuthorHandler *AuthorHandler) createAuthor(w http.ResponseWriter, r *http.Request) {
 	var err error
-	var user User
-	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), AuthorHandler.UserStore); err != nil {
+	var user entity.User
+	if user, err = auth.ValidateTokenAndGetUser(r.Header.Get("Authorization"), AuthorHandler.authStore); err != nil {
 		log.Println("AuthorHandler.createAuthor() - invalid token", err)
-		HandleError(401, err.Error(), w)
+		errors.HandleError(401, err.Error(), w)
 		return
 	}
 
-	if user.Role != MODERATOR {
+	if user.Role != entity.MODERATOR {
 		log.Println("AuthorHandler.createAuthor() - user doesn't have permission to this resource")
-		HandleError(403, "403 Forbidden", w)
+		errors.HandleError(403, "403 Forbidden", w)
 		return
 	}
 
-	var author Author
+	var author entity.Author
 
 	if err = json.NewDecoder(r.Body).Decode(&author); err != nil {
 		log.Println("AuthorHandler.createAuthor() - received decode error", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	log.Println("AuthorHandler.createAuthor() - received req", author)
 
-	var savedAuthor Author
-	if savedAuthor, err = AuthorHandler.S.CreateAuthor(author); err != nil {
+	var savedAuthor entity.Author
+	if savedAuthor, err = AuthorHandler.authorStore.CreateAuthor(author); err != nil {
 		log.Println("AuthorHandler.createAuthor() - received error from db", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(savedAuthor)
 	if err != nil {
 		log.Println("AuthorHandler.createAuthor() - received error while marshaling", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -176,45 +180,45 @@ func (AuthorHandler *AuthorHandler) createAuthor(w http.ResponseWriter, r *http.
 
 func (AuthorHandler *AuthorHandler) updateAuthor(w http.ResponseWriter, r *http.Request) {
 	var err error
-	var user User
-	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), AuthorHandler.UserStore); err != nil {
+	var user entity.User
+	if user, err = auth.ValidateTokenAndGetUser(r.Header.Get("Authorization"), AuthorHandler.authStore); err != nil {
 		log.Println("AuthorHandler.updateAuthor() - invalid token", err)
-		HandleError(401, err.Error(), w)
+		errors.HandleError(401, err.Error(), w)
 		return
 	}
 
-	if user.Role != MODERATOR {
+	if user.Role != entity.MODERATOR {
 		log.Println("AuthorHandler.updateAuthor() - user doesn't have permission to this resource")
-		HandleError(403, "403 Forbidden", w)
+		errors.HandleError(403, "403 Forbidden", w)
 		return
 	}
 
-	var author Author
+	var author entity.Author
 
 	if err := json.NewDecoder(r.Body).Decode(&author); err != nil {
 		log.Println("AuthorHandler.updateAuthor() - received decode error", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	log.Println("AuthorHandler.updateAuthor() - received req", author)
 
-	var updatedAuthor Author
-	if updatedAuthor, err = AuthorHandler.S.UpdateAuthor(author); err != nil {
+	var updatedAuthor entity.Author
+	if updatedAuthor, err = AuthorHandler.authorStore.UpdateAuthor(author); err != nil {
 		log.Println("AuthorHandler.updateAuthor() - received error from db", err)
 		if err == sql.ErrNoRows {
-			HandleError(404, fmt.Sprintf("author with id %v wasn't found", author.Id), w)
+			errors.HandleError(404, fmt.Sprintf("author with id %v wasn't found", author.Id), w)
 			return
 		}
 
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(updatedAuthor)
 	if err != nil {
 		log.Println("AuthorHandler.updateAuthor() - received error while marshaling", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -235,31 +239,31 @@ func (AuthorHandler *AuthorHandler) deleteAuthor(w http.ResponseWriter, r *http.
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("deleteAuthor() - received error", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
-	var user User
-	if user, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), AuthorHandler.UserStore); err != nil {
+	var user entity.User
+	if user, err = auth.ValidateTokenAndGetUser(r.Header.Get("Authorization"), AuthorHandler.authStore); err != nil {
 		log.Println("AuthorHandler.deleteAuthor() - invalid token", err)
-		HandleError(401, err.Error(), w)
+		errors.HandleError(401, err.Error(), w)
 		return
 	}
 
-	if user.Role != MODERATOR {
+	if user.Role != entity.MODERATOR {
 		log.Println("AuthorHandler.deleteAuthor() - user doesn't have permission to this resource")
-		HandleError(403, "403 Forbidden", w)
+		errors.HandleError(403, "403 Forbidden", w)
 		return
 	}
 
-	if err = AuthorHandler.S.DeleteAuthor(id); err != nil {
+	if err = AuthorHandler.authorStore.DeleteAuthor(id); err != nil {
 		log.Println("deleteAuthor() - received error from db", err)
 		if err == sql.ErrNoRows {
-			HandleError(404, fmt.Sprintf("author with id %v wasn't found", id), w)
+			errors.HandleError(404, fmt.Sprintf("author with id %v wasn't found", id), w)
 			return
 		}
 
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 

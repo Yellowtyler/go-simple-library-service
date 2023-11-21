@@ -1,7 +1,8 @@
-package main
+package author
 
 import (
 	"database/sql"
+	"example/library-service/internal/entity"
 	"fmt"
 	"log"
 	"strings"
@@ -18,7 +19,7 @@ func NewAuthorStore(db *sql.DB) *AuthorStore {
 	return &AuthorStore{db}
 }
 
-func (store *AuthorStore) GetAuthor(id uuid.UUID) (a Author, e error) {
+func (store *AuthorStore) GetAuthor(id uuid.UUID) (a entity.Author, e error) {
 	statement, err := store.db.Prepare(`
 		select a.*, b.id, b.name, b.genre, b.publication_date, b.created_at
 		from authors a 
@@ -37,9 +38,9 @@ func (store *AuthorStore) GetAuthor(id uuid.UUID) (a Author, e error) {
 		return a, rowErr
 	}
 
-	var books []AuthorBook
+	var books []entity.AuthorBook
 	for rows.Next() {
-		var book AuthorBook
+		var book entity.AuthorBook
 		if scanErr := rows.Scan(&a.Id, &a.Name, &a.CreatedAt, &book.Id, &book.Name, &book.Genre, &book.PublicationDate, &book.CreatedAt); scanErr != nil {
 			log.Println("AuthorStore.GetAuthor() - received error from db", scanErr)
 			return a, scanErr
@@ -53,7 +54,7 @@ func (store *AuthorStore) GetAuthor(id uuid.UUID) (a Author, e error) {
 	return a, nil
 }
 
-func (store *AuthorStore) GetAuthors(m map[string]string) ([]Author, error) {
+func (store *AuthorStore) GetAuthors(m map[string]string) ([]entity.Author, error) {
 	query := `select a.*, b.id, b.name, b.genre, b.publication_date, b.created_at from authors a 
 		left join books b on a.id = b.author_id`
 	params := make([]any, len(m))
@@ -103,19 +104,19 @@ func (store *AuthorStore) GetAuthors(m map[string]string) ([]Author, error) {
 		return nil, queryError
 	}
 
-	authorsMap := make(map[uuid.UUID]Author)
-	booksMap := make(map[uuid.UUID][]AuthorBook)
+	authorsMap := make(map[uuid.UUID]entity.Author)
+	booksMap := make(map[uuid.UUID][]entity.AuthorBook)
 	defer queryRows.Close()
 	for queryRows.Next() {
-		var author Author
-		var book AuthorBook
+		var author entity.Author
+		var book entity.AuthorBook
 		if scanErr := queryRows.Scan(&author.Id, &author.Name, &author.CreatedAt, &book.Id, &book.Name, &book.Genre, &book.PublicationDate, &book.CreatedAt); scanErr != nil {
 			log.Println("AuthorStore.GetAuthors() - received error while scanning", err)
 		}
 
 		books, ok := booksMap[author.Id]
 		if !ok {
-			books = make([]AuthorBook, 0)
+			books = make([]entity.AuthorBook, 0)
 		}
 
 		if book.Id != uuid.Nil {
@@ -131,7 +132,7 @@ func (store *AuthorStore) GetAuthors(m map[string]string) ([]Author, error) {
 		return nil, err
 	}
 
-	authors := make([]Author, 0)
+	authors := make([]entity.Author, 0)
 	for _, v := range authorsMap {
 		authors = append(authors, v)
 	}
@@ -144,7 +145,7 @@ func (store *AuthorStore) GetAuthors(m map[string]string) ([]Author, error) {
 	return authors, nil
 }
 
-func (store *AuthorStore) CreateAuthor(author Author) (savedAuthor Author, err error) {
+func (store *AuthorStore) CreateAuthor(author entity.Author) (savedAuthor entity.Author, err error) {
 	statement, err := store.db.Prepare(`
 		insert into authors(name, created_at)
 			values($1, $2) 
@@ -168,7 +169,7 @@ func (store *AuthorStore) CreateAuthor(author Author) (savedAuthor Author, err e
 	return savedAuthor, nil
 }
 
-func (store *AuthorStore) UpdateAuthor(author Author) (updatedAuthor Author, err error) {
+func (store *AuthorStore) UpdateAuthor(author entity.Author) (updatedAuthor entity.Author, err error) {
 	statement, err := store.db.Prepare(`
 		update authors set name=$1 where id=$2
 		returning *

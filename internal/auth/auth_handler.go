@@ -1,7 +1,10 @@
-package main
+package auth
 
 import (
 	"encoding/json"
+	"example/library-service/internal/entity"
+	"example/library-service/internal/errors"
+	"example/library-service/internal/utils"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,26 +14,26 @@ import (
 )
 
 type AuthHandler struct {
-	S *UserStore
+	S *AuthStore
 }
 
-func NewAuthHandler(s *UserStore) *AuthHandler {
+func NewAuthHandler(s *AuthStore) *AuthHandler {
 	return &AuthHandler{s}
 }
 
 func (authHandler *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
-	case r.Method == http.MethodPost && r.URL.Path == RegisterPath:
+	case r.Method == http.MethodPost && r.URL.Path == utils.RegisterPath:
 		authHandler.register(w, r)
 		return
-	case r.Method == http.MethodPost && r.URL.Path == LoginPath:
+	case r.Method == http.MethodPost && r.URL.Path == utils.LoginPath:
 		authHandler.login(w, r)
 		return
-	case r.Method == http.MethodPost && r.URL.Path == LogoutPath:
+	case r.Method == http.MethodPost && r.URL.Path == utils.LogoutPath:
 		authHandler.logout(w, r)
 		return
 	default:
-		HandleError(405, fmt.Sprintf("Method %v not allowed", r.URL.Path), w)
+		errors.HandleError(405, fmt.Sprintf("Method %v not allowed", r.URL.Path), w)
 		return
 	}
 }
@@ -39,7 +42,7 @@ func (authHandler *AuthHandler) register(w http.ResponseWriter, r *http.Request)
 	var req ReqisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Println("AuthHandler.register() - error while decoding", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -48,24 +51,24 @@ func (authHandler *AuthHandler) register(w http.ResponseWriter, r *http.Request)
 	var exists bool
 	var err error
 	if exists, err = authHandler.S.ExistsWithNameOrMail(req.Name, req.Mail); err != nil {
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	if exists {
-		HandleError(400, fmt.Sprintf("user %v already exists!", req.Name), w)
+		errors.HandleError(400, fmt.Sprintf("user %v already exists!", req.Name), w)
 		return
 	}
 
 	req.Password, err = HashAndSalt([]byte(req.Password))
 	if err != nil {
 		log.Println("AuthHandler.register() - error while hashing password", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	if err := authHandler.S.CreateUser(req); err != nil {
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -79,21 +82,21 @@ func (authHandler *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Println("AuthHandler.login() - error while decoding", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	log.Println("AuthHandler.login() - started to process", req.Name)
 
-	var user User
+	var user entity.User
 	var err error
 	if user, err = authHandler.S.GetUserByName(req.Name); err != nil {
-		HandleError(401, "wrong username", w)
+		errors.HandleError(401, "wrong username", w)
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		HandleError(401, "wrong password", w)
+		errors.HandleError(401, "wrong password", w)
 		return
 	}
 
@@ -101,14 +104,14 @@ func (authHandler *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 
 	if token, err = GenerateToken(user.Id, user.Role); err != nil {
 		log.Println("AuthHandler.login() - received error", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	user.Token = token
 	if updateErr := authHandler.S.UpdateToken(user); updateErr != nil {
 		log.Println("AuthHandler.login() - received error", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -124,17 +127,17 @@ func (authHandler *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 	log.Println("AuthHandler.logout() - started to process")
 	token := strings.Split(r.Header.Get("Authorization"), " ")[1]
 	if token == "" {
-		HandleError(401, "Authorization header wasn't provided", w)
+		errors.HandleError(401, "Authorization header wasn't provided", w)
 		return
 	}
 
 	id, _, err := ParseToken(token)
 	if err != nil && err.Error() != "token is expired!" {
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 	if err := authHandler.S.DeleteToken(id); err != nil {
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 

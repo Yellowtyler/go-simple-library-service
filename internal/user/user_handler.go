@@ -1,4 +1,4 @@
-package main
+package user
 
 import (
 	"database/sql"
@@ -8,33 +8,40 @@ import (
 	"net/http"
 	"strings"
 
+	"example/library-service/internal/auth"
+	"example/library-service/internal/entity"
+	"example/library-service/internal/errors"
+	"example/library-service/internal/utils"
+
 	"github.com/google/uuid"
 )
 
 type UserHandler struct {
-	S *UserStore
+	userStore *UserStore
+	authStore *auth.AuthStore
 }
 
-func NewUserHandler(store *UserStore) *UserHandler {
-	return &UserHandler{store}
+func NewUserHandler(db *sql.DB, authStore *auth.AuthStore) *UserHandler {
+	store := NewUserStore(db)
+	return &UserHandler{store, authStore}
 }
 
 func (userHandler *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
-	case r.Method == http.MethodGet && UserRe.Match([]byte(r.URL.Path)):
+	case r.Method == http.MethodGet && utils.UserRe.Match([]byte(r.URL.Path)):
 		userHandler.getUsers(w, r)
 		return
-	case r.Method == http.MethodGet && UserReWithID.Match([]byte(r.URL.Path)):
+	case r.Method == http.MethodGet && utils.UserReWithID.Match([]byte(r.URL.Path)):
 		userHandler.getUser(w, r)
 		return
-	case r.Method == http.MethodPut && UserRe.Match([]byte(r.URL.Path)):
+	case r.Method == http.MethodPut && utils.UserRe.Match([]byte(r.URL.Path)):
 		userHandler.updateUser(w, r)
 		return
-	case r.Method == http.MethodDelete && UserReWithID.Match([]byte(r.URL.Path)):
+	case r.Method == http.MethodDelete && utils.UserReWithID.Match([]byte(r.URL.Path)):
 		userHandler.deleteUser(w, r)
 		return
 	default:
-		HandleError(405, fmt.Sprintf("Method %v not allowed", r.URL.Path), w)
+		errors.HandleError(405, fmt.Sprintf("Method %v not allowed", r.URL.Path), w)
 		return
 	}
 }
@@ -46,33 +53,33 @@ func (userHandler *UserHandler) getUser(w http.ResponseWriter, r *http.Request) 
 
 	log.Println("UserHandler.getUser() - processing request", r.URL.Path)
 
-	if err = ValidateToken(r.Header.Get("Authorization"), (*UserStore)(userHandler.S)); err != nil {
+	if err = auth.ValidateToken(r.Header.Get("Authorization"), userHandler.authStore); err != nil {
 		log.Println("UserHandler.getUser() - invalid token", err)
-		HandleError(401, err.Error(), w)
+		errors.HandleError(401, err.Error(), w)
 		return
 	}
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("UserHandler.getUser() - received error", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
-	var User User
-	if User, err = userHandler.S.GetUser(id); err != nil {
+	var User entity.User
+	if User, err = userHandler.userStore.GetUser(id); err != nil {
 		if err == sql.ErrNoRows {
-			HandleError(404, fmt.Sprintf("user with id %v wasn't found", id), w)
+			errors.HandleError(404, fmt.Sprintf("user with id %v wasn't found", id), w)
 			return
 		}
 		log.Println("UserHandler.getUser() - received error from db", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(User)
 	if err != nil {
 		log.Println("UserHandler.getUser() - received error while marshaling", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -88,37 +95,37 @@ func (userHandler *UserHandler) getUsers(w http.ResponseWriter, r *http.Request)
 
 	values := r.URL.Query()
 
-	queryMap := ToMap(values)
+	queryMap := utils.ToMap(values)
 	log.Println("UserHandler.getUsers() - received req", queryMap)
 
-	if !ValidParams("user", queryMap) {
-		HandleError(400, "Invalid request params", w)
+	if !utils.ValidParams("user", queryMap) {
+		errors.HandleError(400, "Invalid request params", w)
 		return
 	}
 
-	var invoker User
-	if invoker, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(userHandler.S)); err != nil {
+	var invoker entity.User
+	if invoker, err = auth.ValidateTokenAndGetUser(r.Header.Get("Authorization"), userHandler.authStore); err != nil {
 		log.Println("UserHandler.getUsers() - invalid token", err)
-		HandleError(401, err.Error(), w)
+		errors.HandleError(401, err.Error(), w)
 		return
 	}
 
-	if invoker.Role != ADMIN {
-		HandleError(403, "403 Forbidden", w)
+	if invoker.Role != entity.ADMIN {
+		errors.HandleError(403, "403 Forbidden", w)
 		return
 	}
 
-	var Users []User
-	if Users, err = userHandler.S.GetUsers(queryMap); err != nil {
+	var Users []entity.User
+	if Users, err = userHandler.userStore.GetUsers(queryMap); err != nil {
 		log.Println("UserHandler.getUsers() - received error from db", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(Users)
 	if err != nil {
 		log.Println("UserHandler.getUsers() - received error while marshaling", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -131,44 +138,44 @@ func (userHandler *UserHandler) getUsers(w http.ResponseWriter, r *http.Request)
 
 func (userHandler *UserHandler) updateUser(w http.ResponseWriter, r *http.Request) {
 	var err error
-	var invoker User
-	if invoker, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(userHandler.S)); err != nil {
+	var invoker entity.User
+	if invoker, err = auth.ValidateTokenAndGetUser(r.Header.Get("Authorization"), userHandler.authStore); err != nil {
 		log.Println("UserHandler.updateUser() - invalid token: ", err)
-		HandleError(401, err.Error(), w)
+		errors.HandleError(401, err.Error(), w)
 		return
 	}
 
-	if invoker.Role != ADMIN {
-		HandleError(403, "403 Forbidden", w)
+	if invoker.Role != entity.ADMIN {
+		errors.HandleError(403, "403 Forbidden", w)
 		return
 	}
 
-	var user User
+	var user entity.User
 
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 		log.Println("UserHandler.updateUser() - received decode error", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	log.Println("UserHandler.updateUser() - received req", user)
 
-	var updatedUser User
-	if updatedUser, err = userHandler.S.UpdateUser(user); err != nil {
+	var updatedUser entity.User
+	if updatedUser, err = userHandler.userStore.UpdateUser(user); err != nil {
 		log.Println("UserHandler.updateUser() - received error from db", err)
 		if err == sql.ErrNoRows {
-			HandleError(404, fmt.Sprintf("user with id %v wasn't found", user.Id), w)
+			errors.HandleError(404, fmt.Sprintf("user with id %v wasn't found", user.Id), w)
 			return
 		}
 
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(updatedUser)
 	if err != nil {
 		log.Println("UserHandler.updateUser() - received error while marshaling", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
@@ -186,38 +193,38 @@ func (userHandler *UserHandler) deleteUser(w http.ResponseWriter, r *http.Reques
 	strs := strings.Split(r.URL.Path, "/")
 
 	log.Println("deleteUser() - processing request", r.URL.Path)
-	var invoker User
-	if invoker, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(userHandler.S)); err != nil {
+	var invoker entity.User
+	if invoker, err = auth.ValidateTokenAndGetUser(r.Header.Get("Authorization"), userHandler.authStore); err != nil {
 		log.Println("UserHandler.updateUser() - invalid token", err)
-		HandleError(401, err.Error(), w)
+		errors.HandleError(401, err.Error(), w)
 		return
 	}
 
-	if invoker.Role != ADMIN {
-		HandleError(403, "403 Forbidden", w)
+	if invoker.Role != entity.ADMIN {
+		errors.HandleError(403, "403 Forbidden", w)
 		return
 	}
 
-	if err = ValidateToken(r.Header.Get("Authorization"), (*UserStore)(userHandler.S)); err != nil {
+	if err = auth.ValidateToken(r.Header.Get("Authorization"), userHandler.authStore); err != nil {
 		log.Println("UserHandler.deleteUser() - invalid token", err)
-		HandleError(401, err.Error(), w)
+		errors.HandleError(401, err.Error(), w)
 		return
 	}
 
 	if id, err = uuid.Parse(strs[len(strs)-1]); err != nil {
 		log.Println("deleteUser() - received error", err)
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 
-	if err = userHandler.S.DeleteUser(id); err != nil {
+	if err = userHandler.userStore.DeleteUser(id); err != nil {
 		log.Println("deleteUser() - received error from db", err)
 		if err == sql.ErrNoRows {
-			HandleError(404, fmt.Sprintf("user with id %v wasn't found", id), w)
+			errors.HandleError(404, fmt.Sprintf("user with id %v wasn't found", id), w)
 			return
 		}
 
-		HandleError(500, "Internal Server Error", w)
+		errors.HandleError(500, "Internal Server Error", w)
 		return
 	}
 

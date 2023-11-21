@@ -1,6 +1,7 @@
-package main
+package auth
 
 import (
+	"example/library-service/internal/entity"
 	"fmt"
 	"log"
 	"strings"
@@ -13,9 +14,9 @@ import (
 
 var secretKey = []byte("VeryVeryVeryVeryVeryVeryBigSecretKey")
 
-const expirationTime int64 = 100
+const expirationTime int64 = 3600
 
-func ValidateTokenAndGetUser(authHeader string, store *UserStore) (user User, err error) {
+func ValidateTokenAndGetUser(authHeader string, store *AuthStore) (user entity.User, err error) {
 	if authHeader == "" {
 		return user, fmt.Errorf("empty Authorization header")
 	}
@@ -41,7 +42,7 @@ func ValidateTokenAndGetUser(authHeader string, store *UserStore) (user User, er
 	return user, nil
 }
 
-func ValidateToken(authHeader string, store *UserStore) error {
+func ValidateToken(authHeader string, store *AuthStore) error {
 	if authHeader == "" {
 		return fmt.Errorf("empty Authorization header")
 	}

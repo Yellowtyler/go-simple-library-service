@@ -1,7 +1,8 @@
-package main
+package book
 
 import (
 	"database/sql"
+	"example/library-service/internal/entity"
 	"fmt"
 	"log"
 	"strings"
@@ -18,7 +19,7 @@ func NewBookStore(db *sql.DB) *BookStore {
 	return &BookStore{db}
 }
 
-func (store *BookStore) GetBook(id uuid.UUID) (b Book, e error) {
+func (store *BookStore) GetBook(id uuid.UUID) (b entity.Book, e error) {
 
 	statement, err := store.db.Prepare(`
 		select b.id, b.name, b.genre, b.created_at, b.publication_date, a.id, a.name, a.created_at
@@ -40,7 +41,7 @@ func (store *BookStore) GetBook(id uuid.UUID) (b Book, e error) {
 	return b, nil
 }
 
-func (store *BookStore) GetBooks(m map[string]string) ([]Book, error) {
+func (store *BookStore) GetBooks(m map[string]string) ([]entity.Book, error) {
 	query := `select b.id, b.name, b.genre, b.publication_date, b.created_at, b.author_id, a.name, a.created_at from books b 
 		left join authors a on b.author_id = a.id`
 	params := make([]any, len(m))
@@ -89,10 +90,10 @@ func (store *BookStore) GetBooks(m map[string]string) ([]Book, error) {
 		return nil, queryError
 	}
 
-	var books []Book
+	var books []entity.Book
 	defer queryRows.Close()
 	for queryRows.Next() {
-		var book Book
+		var book entity.Book
 		if scanErr := queryRows.Scan(&book.Id, &book.Name, &book.Genre, &book.PublicationDate, &book.CreatedAt, &book.Author.Id, &book.Author.Name, &book.Author.CreatedAt); scanErr != nil {
 			log.Println("BookStore.GetBooks() - received error while scanning", err)
 		}
@@ -125,7 +126,7 @@ func (store *BookStore) Remove(id uuid.UUID) error {
 	return nil
 }
 
-func (store *BookStore) CreateBook(b Book) (savedBook Book, err error) {
+func (store *BookStore) CreateBook(b entity.Book) (savedBook entity.Book, err error) {
 
 	statement, err := store.db.Prepare(`
 		with new_book as (	
@@ -156,7 +157,7 @@ func (store *BookStore) CreateBook(b Book) (savedBook Book, err error) {
 	return savedBook, nil
 }
 
-func (store *BookStore) UpdateBook(b Book) (updatedBook Book, err error) {
+func (store *BookStore) UpdateBook(b entity.Book) (updatedBook entity.Book, err error) {
 
 	statement, err := store.db.Prepare(`
 		with updated_book as (
