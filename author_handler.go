@@ -103,7 +103,7 @@ func (AuthorHandler *AuthorHandler) getAuthors(w http.ResponseWriter, r *http.Re
 
 	if !ValidParams("author", queryMap) {
 		log.Println("AuthorHandler.getAuthors() - received invalid params!", queryMap)
-		HandleError(500, "Internal Server Error", w)
+		HandleError(400, "Invalid request params", w)
 		return
 	}
 

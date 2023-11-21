@@ -20,6 +20,7 @@ var (
 var params = map[string]map[string]bool{
 	"author": {"book_name": true, "author_name": true, "genre": true},
 	"book":   {"book_name": true, "genre": true, "publication_date": true, "author_name": true},
+	"user":   {"name": true, "mail": true, "role": true},
 }
 
 func ToMap(values url.Values) map[string]string {

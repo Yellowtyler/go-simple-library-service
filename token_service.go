@@ -15,10 +15,6 @@ var secretKey = []byte("VeryVeryVeryVeryVeryVeryBigSecretKey")
 
 const expirationTime int64 = 100
 
-func hasPermission(userId uuid.UUID, role int, roles []int) bool {
-	return true
-}
-
 func ValidateTokenAndGetUser(authHeader string, store *UserStore) (user User, err error) {
 	if authHeader == "" {
 		return user, fmt.Errorf("empty Authorization header")
@@ -74,7 +70,7 @@ func ValidateToken(authHeader string, store *UserStore) error {
 func ParseToken(tokenString string) (uuid.UUID, int, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			log.Println("AuthService.ParseToken() - unexpected signing method")
+			log.Println("TokenService.ParseToken() - unexpected signing method")
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 		}
 
@@ -82,7 +78,7 @@ func ParseToken(tokenString string) (uuid.UUID, int, error) {
 	})
 
 	if err != nil {
-		log.Println("AuthService.ParseToken() - received error ", err)
+		log.Println("TokenService.ParseToken() - received error ", err)
 		return uuid.Nil, 0, err
 	}
 
@@ -90,7 +86,7 @@ func ParseToken(tokenString string) (uuid.UUID, int, error) {
 	var role int
 	var expiredAt int64
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
-		log.Println("AuthService.ParseToken() - claims", claims)
+		log.Println("TokenService.ParseToken() - claims", claims)
 		id = claims["id"].(string)
 		role = int(claims["role"].(float64))
 		expiredAt = int64(claims["expired_at"].(float64))
@@ -100,7 +96,7 @@ func ParseToken(tokenString string) (uuid.UUID, int, error) {
 	}
 
 	if time.Now().Unix() >= expiredAt {
-		log.Println("AuthService.ParseToken() - token is expired!")
+		log.Println("TokenService.ParseToken() - token is expired!")
 		return uuid.Nil, role, fmt.Errorf("token is expired!")
 	}
 
@@ -118,7 +114,7 @@ func GenerateToken(id uuid.UUID, role int) (string, error) {
 
 	tokenString, err := token.SignedString(secretKey)
 	if err != nil {
-		log.Println("AuthService.GenerateToken() received error while signing", err)
+		log.Println("TokenService.GenerateToken() received error while signing", err)
 		return "", err
 	}
 
@@ -128,7 +124,7 @@ func GenerateToken(id uuid.UUID, role int) (string, error) {
 func HashAndSalt(pwd []byte) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword(pwd, bcrypt.DefaultCost)
 	if err != nil {
-		log.Println("AuthService.HashAndSalt() - received error while generating password", err)
+		log.Println("TokenService.HashAndSalt() - received error while generating password", err)
 		return "", err
 	}
 

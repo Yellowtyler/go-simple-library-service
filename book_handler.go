@@ -103,7 +103,7 @@ func (BookHandler *BookHandler) getBooks(w http.ResponseWriter, r *http.Request)
 	if !ValidParams("book", queryMap) {
 		log.Println("BookHandler.getBooks() - received invalid params!", queryMap)
 
-		HandleError(500, "Internal Server Error", w)
+		HandleError(400, "Invalid request params", w)
 		return
 	}
 

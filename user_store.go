@@ -112,7 +112,12 @@ func (store *UserStore) GetUsers(m map[string]string) ([]User, error) {
 		query += " where "
 		var i = 1
 		for k, v := range m {
-			query += k + " like '%' || $" + fmt.Sprint(i) + " || '%' and "
+			if k == "role" {
+				query += k + "=$" + fmt.Sprint(i) + " and "
+			} else {
+				query += k + " like '%' || $" + fmt.Sprint(i) + " || '%' and "
+			}
+
 			params[i-1] = v
 			i++
 		}

@@ -91,6 +91,11 @@ func (userHandler *UserHandler) getUsers(w http.ResponseWriter, r *http.Request)
 	queryMap := ToMap(values)
 	log.Println("UserHandler.getUsers() - received req", queryMap)
 
+	if !ValidParams("user", queryMap) {
+		HandleError(400, "Invalid request params", w)
+		return
+	}
+
 	var invoker User
 	if invoker, err = ValidateTokenAndGetUser(r.Header.Get("Authorization"), (*UserStore)(userHandler.S)); err != nil {
 		log.Println("UserHandler.getUsers() - invalid token", err)
@@ -100,12 +105,6 @@ func (userHandler *UserHandler) getUsers(w http.ResponseWriter, r *http.Request)
 
 	if invoker.Role != ADMIN {
 		HandleError(403, "403 Forbidden", w)
-		return
-	}
-
-	if !ValidParams("User", queryMap) {
-		log.Println("UserHandler.getUsers() - received invalid params!", queryMap)
-		HandleError(500, "Internal Server Error", w)
 		return
 	}
 
